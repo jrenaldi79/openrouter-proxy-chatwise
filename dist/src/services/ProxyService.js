@@ -5,10 +5,26 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProxyService = void 0;
 const axios_1 = __importDefault(require("axios"));
+const https_1 = __importDefault(require("https"));
 const OpenRouterRequest_1 = require("../models/OpenRouterRequest");
 class ProxyService {
     constructor(baseUrl = 'https://openrouter.ai', _defaultTimeout = 30000) {
         this.baseUrl = baseUrl;
+        this.httpsAgent = new https_1.default.Agent({
+            keepAlive: true,
+            timeout: 60000,
+            secureProtocol: 'TLSv1_2_method',
+            ciphers: [
+                'ECDHE-RSA-AES128-GCM-SHA256',
+                'ECDHE-RSA-AES256-GCM-SHA384',
+                'ECDHE-RSA-AES128-SHA256',
+                'ECDHE-RSA-AES256-SHA384',
+                'AES128-GCM-SHA256',
+                'AES256-GCM-SHA384',
+                'AES128-SHA256',
+                'AES256-SHA256'
+            ].join(':'),
+        });
     }
     async makeRequest(request) {
         let lastError = null;
@@ -40,6 +56,7 @@ class ProxyService {
             timeout: request.timeout,
             data: request.body,
             validateStatus: () => true,
+            httpsAgent: this.httpsAgent,
         };
         return await (0, axios_1.default)(config);
     }

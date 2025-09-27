@@ -1,0 +1,10 @@
+node_modules/
+.env
+*.log
+coverage/
+.nyc_output/
+.git/
+.DS_Store
+*.test.ts
+*.spec.ts
+tests/

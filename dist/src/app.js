@@ -182,7 +182,72 @@ function createApp() {
             res.status(502).json(errorResponse);
         }
     });
+    app.get('/v1/credits', async (req, res) => {
+        const correlationId = req.correlationId;
+        try {
+            const authToken = AuthToken_1.AuthToken.fromRequest(req);
+            if (!authToken || !authToken.isValid) {
+                const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse('UNAUTHORIZED', authToken
+                    ? 'Invalid API key format'
+                    : 'Authorization header required', 401, correlationId);
+                return res
+                    .status(errorResponse.status)
+                    .set(errorResponse.headers)
+                    .json(errorResponse.body);
+            }
+            const keyRequest = OpenRouterRequest_1.OpenRouterRequest.createKeyRequest(authToken.getAuthorizationHeader(), OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS, correlationId);
+            const proxyResponse = await proxyService.makeRequest(keyRequest);
+            if (proxyResponse.status >= 400) {
+                let errorCode = 'UPSTREAM_ERROR';
+                let statusCode = 502;
+                if (proxyResponse.status === 401) {
+                    errorCode = 'UNAUTHORIZED';
+                    statusCode = 401;
+                }
+                else if (proxyResponse.status === 429) {
+                    errorCode = 'RATE_LIMIT_EXCEEDED';
+                    statusCode = 429;
+                }
+                const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse(errorCode, typeof proxyResponse.data === 'object' &&
+                    proxyResponse.data &&
+                    'error' in proxyResponse.data
+                    ? proxyResponse.data.error.message ||
+                        'OpenRouter API error'
+                    : 'OpenRouter API unavailable', statusCode, correlationId);
+                if (proxyResponse.status === 429 &&
+                    proxyResponse.headers['retry-after']) {
+                    errorResponse.headers['Retry-After'] =
+                        proxyResponse.headers['retry-after'];
+                }
+                return res
+                    .status(errorResponse.status)
+                    .set(errorResponse.headers)
+                    .json(errorResponse.body);
+            }
+            const openRouterResponse = proxyResponse.data;
+            const keyData = openRouterResponse.data;
+            const validatedData = CreditResponse_1.CreditResponse.validateKeyResponseData(keyData);
+            const creditResponse = CreditResponse_1.CreditResponse.fromKeyResponse(validatedData, correlationId, proxyResponse.headers);
+            const response = creditResponse
+                .withCacheHeaders('MISS')
+                .toExpressResponse();
+            return res
+                .status(response.status)
+                .set(response.headers)
+                .json(response.body);
+        }
+        catch (error) {
+            const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse('INTERNAL_ERROR', error instanceof Error ? error.message : 'Internal server error', 500, correlationId);
+            return res
+                .status(errorResponse.status)
+                .set(errorResponse.headers)
+                .json(errorResponse.body);
+        }
+    });
     app.use('/v1', async (req, res, _next) => {
+        if (req.path === '/credits' && req.method === 'GET') {
+            return;
+        }
         const correlationId = req.correlationId;
         try {
             const fullPath = `/api/v1${req.path}`;

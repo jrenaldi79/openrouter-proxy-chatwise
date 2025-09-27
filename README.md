@@ -91,9 +91,11 @@ src/
 └── config/          # Configuration management
 
 tests/
-├── contract/        # API contract tests
-├── integration/     # End-to-end flow tests
-└── unit/           # Service unit tests
+├── unit/           # Mock-based unit tests (fast, isolated) - 10 files
+├── contract/       # API contract validation (no external calls) - 1 file
+├── integration/    # Component integration tests (middleware chains) - 2 files
+├── performance/    # Real API performance tests - 1 file
+└── production/     # Real API functional tests - 3 files
 
 docs/
 ├── ci-cd/           # CI/CD pipeline documentation
@@ -115,21 +117,43 @@ docs/
 5. **Error Handling**: Structured error responses with correlation IDs
 
 ### Testing Strategy
+
+Our comprehensive test suite is organized into five distinct categories:
+
+#### Test Types
+- **Unit Tests** (`tests/unit/`) - Fast, isolated tests using mocks (10 files)
+- **Contract Tests** (`tests/contract/`) - API contract validation, no external calls (1 file)
+- **Integration Tests** (`tests/integration/`) - Component integration and middleware chains (2 files)
+- **Performance Tests** (`tests/performance/`) - Real API performance metrics (1 file)
+- **Production Tests** (`tests/production/`) - Real API functional validation (3 files)
+
+#### Test Commands
 ```bash
-# Run all tests
-npm test
+# Local development (fast, mock-based)
+npm test                    # Unit tests only (default)
+npm run test:unit          # Mock-based unit tests
+npm run test:contract      # API contract validation
+npm run test:integration   # Component integration tests
+npm run test:local         # All local tests (unit + contract + integration)
 
-# Run specific test types
-npm run test:unit
-npm run test:integration
-npm run test:contract
+# Real API testing (requires OPENROUTER_TEST_API_KEY)
+npm run test:performance   # Performance metrics with real APIs
+npm run test:real-api      # Functional validation with real APIs
+npm run test:production    # Script-based production validation
 
-# Performance testing
-npm run test:performance
-
-# Test coverage
-npm run test:coverage
+# Development utilities
+npm run test:coverage      # Generate coverage report
+npm run test:watch         # Watch mode for unit tests
+npm run test:all          # All tests including integration
 ```
+
+#### CI/CD Test Strategy
+- **Local Development**: `npm run test:local` (unit + contract + integration - no API key required)
+- **CI Pipeline**: `npm run test:local` (fast mock-based tests, no real API calls)
+- **Staging Environment**:
+  - `npm run test:performance` (real API performance validation)
+  - `npm run test:real-api` (real API functional validation)
+- **Production**: Smoke tests and health checks only
 
 ### Testing with Real API Key
 
@@ -145,9 +169,13 @@ To test the proxy with your actual OpenRouter API key:
    npm run dev
    ```
 
-3. **Run the real API test script**:
+3. **Run real API tests**:
    ```bash
+   # Functional validation
    npm run test:real-api
+
+   # Performance testing
+   npm run test:performance
    ```
 
 **Manual testing with curl**:

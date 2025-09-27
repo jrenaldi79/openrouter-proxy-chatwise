@@ -3,7 +3,7 @@ import { Express } from 'express';
 import nock from 'nock';
 import { createApp } from '../../src/app';
 
-describe('Error Propagation Integration Tests', () => {
+describe('Error Propagation Unit Tests', () => {
   let app: Express;
 
   beforeAll(() => {
@@ -174,19 +174,19 @@ describe('Error Propagation Integration Tests', () => {
 
     it('should include correlation IDs in all error responses', async () => {
       const errorEndpoints = [
-        { path: '/api/v1/models', method: 'get' },
-        { path: '/api/v1/me/credits', method: 'get' },
-        { path: '/api/v1/chat/completions', method: 'post' },
+        { clientPath: '/api/v1/models', openRouterPath: '/api/v1/models', method: 'get' },
+        { clientPath: '/api/v1/me/credits', openRouterPath: '/api/v1/key', method: 'get' },
+        { clientPath: '/api/v1/chat/completions', openRouterPath: '/api/v1/chat/completions', method: 'post' },
       ];
 
       for (const endpoint of errorEndpoints) {
         const openRouterMock = nock('https://openrouter.ai')
-          [endpoint.method as 'get' | 'post'](endpoint.path)
+          [endpoint.method as 'get' | 'post'](endpoint.openRouterPath)
           .matchHeader('authorization', validApiKey)
           .reply(500, { error: 'Internal server error' });
 
         const requestBuilder = request(app)
-          [endpoint.method as 'get' | 'post'](endpoint.path)
+          [endpoint.method as 'get' | 'post'](endpoint.clientPath)
           .set('Authorization', validApiKey);
 
         if (endpoint.method === 'post') {
@@ -299,19 +299,19 @@ describe('Error Propagation Integration Tests', () => {
       const transformationErrors = [
         {
           name: 'Missing usage field',
-          response: { limit: 100 }, // Missing usage
+          response: { data: { limit: 100 } }, // Missing usage
           expectedCode: 'INTERNAL_ERROR',
           expectedMessage: /invalid.*response/i,
         },
         {
           name: 'Invalid data types',
-          response: { limit: 'not-a-number', usage: 'also-not-a-number' },
+          response: { data: { limit: 'not-a-number', usage: 'also-not-a-number' } },
           expectedCode: 'INTERNAL_ERROR',
           expectedMessage: /invalid.*data.*type/i,
         },
         {
           name: 'Negative values',
-          response: { limit: -100, usage: -25 },
+          response: { data: { limit: -100, usage: -25 } },
           expectedCode: 'INTERNAL_ERROR',
           expectedMessage: /invalid.*value/i,
         },

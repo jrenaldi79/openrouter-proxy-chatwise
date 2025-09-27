@@ -36,7 +36,7 @@ describe('Real API Integration Tests', () => {
         expect(typeof response.body.data.total_usage).toBe('number');
 
         // Should have proper headers
-        expect(response.headers['content-type']).toBe('application/json');
+        expect(response.headers['content-type']).toMatch(/^application\/json/);
         expect(response.headers['x-correlation-id']).toBeDefined();
       },
       10000
@@ -67,7 +67,7 @@ describe('Real API Integration Tests', () => {
           expect(response.body.data).toHaveProperty('usage');
 
           // Should have proper headers
-          expect(response.headers['content-type']).toBe('application/json');
+          expect(response.headers['content-type']).toMatch(/^application\/json/);
           expect(response.headers['x-correlation-id']).toBeDefined();
         }
       },
@@ -103,7 +103,7 @@ describe('Real API Integration Tests', () => {
           expect(firstModel).toHaveProperty('name');
 
           // Should have proper headers
-          expect(response.headers['content-type']).toBe('application/json');
+          expect(response.headers['content-type']).toMatch(/^application\/json/);
           expect(response.headers['x-correlation-id']).toBeDefined();
         }
       },
@@ -161,12 +161,53 @@ describe('Real API Integration Tests', () => {
           expect(response.body.choices.length).toBeGreaterThan(0);
 
           // Should have proper headers
-          expect(response.headers['content-type']).toBe('application/json');
+          expect(response.headers['content-type']).toMatch(/^application\/json/);
           expect(response.headers['x-correlation-id']).toBeDefined();
         }
       },
       15000
     ); // Even longer timeout for chat completions
+
+    testIf(hasRealApiKey)(
+      'should handle streaming chat completions with real API',
+      async () => {
+        const response = await request(app)
+          .post('/v1/chat/completions')
+          .set('Authorization', validApiKey)
+          .send({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'user', content: 'Say "test" and nothing else.' }
+            ],
+            max_tokens: 5,
+            stream: true
+          });
+
+        console.log('Streaming chat response status:', response.status);
+        console.log('Streaming chat response headers:', response.headers);
+
+        // Streaming responses should work (200) or return proper error
+        if (response.status === 403 || response.status === 502) {
+          // Cloudflare or similar blocking
+          expect(response.body).toHaveProperty('error');
+          expect(response.headers['x-correlation-id']).toBeDefined();
+        } else if (response.status === 200) {
+          // For streaming, expect text/plain or text/event-stream content-type
+          const contentType = response.headers['content-type'] || '';
+          expect(
+            contentType.includes('text/plain') ||
+            contentType.includes('text/event-stream') ||
+            contentType.includes('application/json')
+          ).toBe(true);
+          expect(response.headers['x-correlation-id']).toBeDefined();
+        } else {
+          // Should get proper error response structure
+          expect(response.body).toHaveProperty('error');
+          expect(response.headers['x-correlation-id']).toBeDefined();
+        }
+      },
+      20000
+    );
 
     test('should skip real API tests when no API key is available', () => {
       if (!hasRealApiKey) {

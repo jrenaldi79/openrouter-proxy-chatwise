@@ -2,19 +2,19 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
 
-  // Test patterns - explicitly exclude production tests
+  // Test patterns - LOCAL tests only (no real API calls)
   testMatch: [
     '<rootDir>/tests/contract/**/*.test.ts',
     '<rootDir>/tests/integration/**/*.test.ts',
-    '<rootDir>/tests/performance/**/*.test.ts',
     '<rootDir>/tests/unit/**/*.test.ts'
   ],
 
-  // Explicitly ignore production tests directory
+  // Explicitly ignore real API test directories
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
-    '/tests/production/'
+    '/tests/production/',
+    '/tests/performance/'
   ],
 
   // Coverage configuration

@@ -29,8 +29,8 @@ jobs:
     - name: Run type checking
       run: npm run type-check
 
-    - name: Run local tests (excludes production tests)
-      run: npm test
+    - name: Run local tests (unit + contract + integration)
+      run: npm run test:local
 
     - name: Generate test coverage
       run: npm run test:coverage
@@ -121,13 +121,21 @@ jobs:
         echo "🧪 Running staging validation tests against: $SERVICE_URL"
         npm run test:production
 
-    - name: Run comprehensive staging tests
+    - name: Run performance tests against staging
       env:
         OPENROUTER_TEST_API_KEY: ${{ secrets.OPENROUTER_TEST_API_KEY }}
         SERVICE_URL: ${{ needs.deploy-staging.outputs.staging-url }}
       run: |
-        echo "🔬 Running comprehensive Jest staging tests..."
-        npm run test:production:jest
+        echo "⚡ Running performance tests against staging..."
+        npm run test:performance
+
+    - name: Run production validation tests against staging
+      env:
+        OPENROUTER_TEST_API_KEY: ${{ secrets.OPENROUTER_TEST_API_KEY }}
+        SERVICE_URL: ${{ needs.deploy-staging.outputs.staging-url }}
+      run: |
+        echo "🔬 Running production validation tests against staging..."
+        npm run test:real-api
 
     - name: Staging test results
       run: |

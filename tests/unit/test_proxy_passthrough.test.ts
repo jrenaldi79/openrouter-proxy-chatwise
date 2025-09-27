@@ -95,14 +95,15 @@ describe('Proxy Passthrough Contract Tests', () => {
         },
       };
 
+      const invalidButValidFormatKey = 'Bearer sk-or-v1-invalid-key-12345678';
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/models')
-        .matchHeader('authorization', 'Bearer invalid-key')
+        .matchHeader('authorization', invalidButValidFormatKey)
         .reply(401, openRouterErrorResponse);
 
       const response = await request(app)
         .get('/api/v1/models')
-        .set('Authorization', 'Bearer invalid-key')
+        .set('Authorization', invalidButValidFormatKey)
         .expect(401);
 
       expect(response.body).toEqual(openRouterErrorResponse);
@@ -118,9 +119,10 @@ describe('Proxy Passthrough Contract Tests', () => {
       const response = await request(app)
         .get('/api/v1/models')
         .set('Authorization', validApiKey)
-        .expect(500);
+        .expect(502); // 5xx errors are mapped to 502 for consistency
 
-      expect(response.body).toEqual({ error: 'Internal server error' });
+      // Response is transformed to standard error format
+      expect(response.body.error.code).toBe('UPSTREAM_ERROR');
       expect(openRouterMock.isDone()).toBe(true);
     });
   });

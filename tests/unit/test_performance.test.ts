@@ -3,7 +3,7 @@ import { Express } from 'express';
 import nock from 'nock';
 import { createApp } from '../../src/app';
 
-describe('Performance Integration Tests', () => {
+describe('Performance Unit Tests', () => {
   let app: Express;
 
   beforeAll(() => {

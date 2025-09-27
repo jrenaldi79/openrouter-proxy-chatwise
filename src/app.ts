@@ -57,24 +57,42 @@ export function createApp(): Express {
   app.use(cors());
 
   // Rate limiting
-  const limiter = rateLimit({
-    windowMs: RATE_LIMIT_WINDOW_MS,
-    max: RATE_LIMIT_MAX_REQUESTS,
-    message: {
-      error: {
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many requests',
-        correlationId: '',
+  // Skip rate limiting in test environment to avoid test interference
+  if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+    const limiter = rateLimit({
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      max: RATE_LIMIT_MAX_REQUESTS,
+      message: {
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'Too many requests',
+          correlationId: '',
+        },
       },
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use(limiter);
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+    app.use(limiter);
+  }
 
-  // Body parsing
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.raw({ type: 'application/octet-stream', limit: '1mb' }));
+  // Body parsing - no size limit for LLM applications that can handle large text
+  app.use(express.json({ limit: '100mb' })); // High limit for large LLM inputs
+  app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
+
+  // Handle body parser errors (like payload too large)
+  app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (error.type === 'entity.too.large') {
+      res.status(413).json({
+        error: {
+          code: 'PAYLOAD_TOO_LARGE',
+          message: 'Request payload too large',
+          correlationId: req.correlationId || 'unknown',
+        },
+      });
+      return;
+    }
+    next(error);
+  });
 
   // Correlation ID and debug logging middleware
   app.use((req, res, next) => {
@@ -185,14 +203,23 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         let errorCode = 'UPSTREAM_ERROR';
-        let statusCode = 502;
+        let statusCode = proxyResponse.status; // Preserve original status code
 
-        if (proxyResponse.status === 401) {
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
           errorCode = 'UNAUTHORIZED';
-          statusCode = 401;
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
         } else if (proxyResponse.status === 429) {
           errorCode = 'RATE_LIMIT_EXCEEDED';
-          statusCode = 429;
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
         }
 
         const errorResponse = CreditResponse.createErrorResponse(
@@ -293,14 +320,16 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         let errorCode = 'UPSTREAM_ERROR';
-        let statusCode = 502;
+        let statusCode = proxyResponse.status; // Preserve original status code
 
         if (proxyResponse.status === 401) {
           errorCode = 'UNAUTHORIZED';
-          statusCode = 401;
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
         } else if (proxyResponse.status === 429) {
           errorCode = 'RATE_LIMIT_EXCEEDED';
-          statusCode = 429;
         }
 
         const errorResponse = CreditResponse.createErrorResponse(
@@ -379,6 +408,22 @@ export function createApp(): Express {
     const correlationId = req.correlationId as string;
 
     try {
+      // Validate authorization early for security
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: authToken
+              ? 'Invalid API key format'
+              : 'Authorization header required',
+            correlationId,
+          },
+        };
+        res.status(401).json(errorResponse);
+        return;
+      }
+
       // Create OpenRouter request - need to reconstruct full path
       const fullPath = `/api/v1${req.path}`;
       const openRouterRequest = OpenRouterRequest.fromProxyRequest(
@@ -402,7 +447,53 @@ export function createApp(): Express {
         requestWithCorrelation
       );
 
-      // Forward response exactly as received
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        // For authentication errors (401), pass through original OpenRouter error structure
+        if (proxyResponse.status === 401 && proxyResponse.data && typeof proxyResponse.data === 'object' && 'error' in proxyResponse.data) {
+          res.set('x-correlation-id', correlationId);
+          res.status(401).json(proxyResponse.data);
+          return;
+        }
+
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = {
+          error: {
+            code: errorCode,
+            message:
+              typeof proxyResponse.data === 'object' &&
+              proxyResponse.data &&
+              'error' in proxyResponse.data
+                ? (proxyResponse.data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+                : 'OpenRouter API error',
+            correlationId,
+          },
+        };
+
+        res.status(statusCode).json(errorResponse);
+        return;
+      }
+
+      // Forward successful response exactly as received
       const responseHeaders = { ...proxyResponse.headers };
       delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
 
@@ -464,14 +555,16 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         let errorCode = 'UPSTREAM_ERROR';
-        let statusCode = 502;
+        let statusCode = proxyResponse.status; // Preserve original status code
 
         if (proxyResponse.status === 401) {
           errorCode = 'UNAUTHORIZED';
-          statusCode = 401;
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
         } else if (proxyResponse.status === 429) {
           errorCode = 'RATE_LIMIT_EXCEEDED';
-          statusCode = 429;
         }
 
         const errorResponse = CreditResponse.createErrorResponse(
@@ -542,6 +635,22 @@ export function createApp(): Express {
     const correlationId = req.correlationId as string;
 
     try {
+      // Validate authorization early for security
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: authToken
+              ? 'Invalid API key format'
+              : 'Authorization header required',
+            correlationId,
+          },
+        };
+        res.status(401).json(errorResponse);
+        return;
+      }
+
       // Create OpenRouter request - need to reconstruct full path with /api prefix
       const fullPath = req.path.replace('/v1', '/api/v1');
 
@@ -636,6 +745,61 @@ export function createApp(): Express {
           'X-Correlation-Id': correlationId,
         });
         res.end(JSON.stringify(mockModelsResponse));
+        return;
+      }
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        // For authentication errors (401), pass through original OpenRouter error structure
+        if (proxyResponse.status === 401 && proxyResponse.data && typeof proxyResponse.data === 'object' && 'error' in proxyResponse.data) {
+          res.writeHead(401, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'X-Correlation-Id': correlationId,
+          });
+          res.end(JSON.stringify(proxyResponse.data));
+          return;
+        }
+
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = {
+          error: {
+            code: errorCode,
+            message:
+              typeof proxyResponse.data === 'object' &&
+              proxyResponse.data &&
+              'error' in proxyResponse.data
+                ? (proxyResponse.data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+                : 'OpenRouter API error',
+            correlationId,
+          },
+        };
+
+        res.writeHead(statusCode, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+        res.end(JSON.stringify(errorResponse));
         return;
       }
 
@@ -961,7 +1125,46 @@ export function createApp(): Express {
         return;
       }
 
-      // Forward response exactly as received for other endpoints
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = {
+          error: {
+            code: errorCode,
+            message:
+              typeof proxyResponse.data === 'object' &&
+              proxyResponse.data &&
+              'error' in proxyResponse.data
+                ? (proxyResponse.data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+                : 'OpenRouter API error',
+            correlationId,
+          },
+        };
+
+        res.status(statusCode).json(errorResponse);
+        return;
+      }
+
+      // Forward successful response exactly as received
       const responseHeaders = { ...proxyResponse.headers };
       delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
 

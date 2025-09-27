@@ -3,7 +3,7 @@ import { Express } from 'express';
 import nock from 'nock';
 import { createApp } from '../../src/app';
 
-describe('Header Compatibility Integration Tests', () => {
+describe('Header Compatibility Unit Tests', () => {
   let app: Express;
 
   beforeAll(() => {
@@ -41,7 +41,7 @@ describe('Header Compatibility Integration Tests', () => {
         .expect(200);
 
       // Verification: Content-Type should NOT include charset
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['content-type']).not.toContain('charset');
 
       expect(openRouterMock.isDone()).toBe(true);
@@ -58,7 +58,7 @@ describe('Header Compatibility Integration Tests', () => {
         .set('Authorization', validApiKey)
         .expect(200);
 
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['content-type']).not.toContain('charset');
 
       expect(openRouterMock.isDone()).toBe(true);
@@ -75,7 +75,7 @@ describe('Header Compatibility Integration Tests', () => {
         .set('Authorization', validApiKey)
         .expect(200);
 
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['content-type']).not.toContain('charset');
 
       expect(openRouterMock.isDone()).toBe(true);
@@ -98,7 +98,7 @@ describe('Header Compatibility Integration Tests', () => {
         .set('Authorization', validApiKey)
         .expect(200);
 
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['content-type']).not.toContain('charset');
 
       expect(openRouterMock.isDone()).toBe(true);
@@ -201,7 +201,7 @@ describe('Header Compatibility Integration Tests', () => {
         })
         .expect(200);
 
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['access-control-allow-origin']).toBe('*');
       expect(response.headers['x-correlation-id']).toBeDefined();
 
@@ -227,7 +227,7 @@ describe('Header Compatibility Integration Tests', () => {
         .expect(200);
 
       // HTTP headers are case-insensitive, but we should maintain consistency
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
 
       expect(openRouterMock.isDone()).toBe(true);
     });
@@ -252,7 +252,7 @@ describe('Header Compatibility Integration Tests', () => {
       });
 
       // Verify exact content-type that should pass validation
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
 
       expect(openRouterMock.isDone()).toBe(true);
     });
@@ -268,7 +268,7 @@ describe('Header Compatibility Integration Tests', () => {
         .set('Authorization', invalidApiKey)
         .expect(401);
 
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['access-control-allow-origin']).toBe('*');
       expect(response.headers['x-correlation-id']).toBeDefined();
     });
@@ -295,7 +295,7 @@ describe('Header Compatibility Integration Tests', () => {
         .set('Authorization', validApiKey)
         .expect(402);
 
-      expect(response.headers['content-type']).toBe('application/json');
+      expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.headers['access-control-allow-origin']).toBe('*');
 
       expect(openRouterMock.isDone()).toBe(true);

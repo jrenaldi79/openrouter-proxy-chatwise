@@ -2,9 +2,9 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
 
-  // Only test REAL production tests (exclude mock-based unit tests)
+  // All production tests (real API calls)
   testMatch: [
-    '<rootDir>/tests/production/test_real_api.test.ts'
+    '<rootDir>/tests/production/**/*.test.ts'
   ],
 
   // Ignore only basic directories

@@ -345,24 +345,21 @@ export function createApp(): Express {
           .json(errorResponse.body);
       }
 
-      // Transform the response - extract data from nested OpenRouter response
-      const openRouterResponse = proxyResponse.data as { data?: unknown };
-      const keyData = openRouterResponse.data;
+      // Return the original OpenRouter response format (same as /v1/auth/key)
+      // Don't transform - just forward the auth/key response directly
+      const responseHeaders = { ...proxyResponse.headers };
+      delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
 
-      const validatedData = CreditResponse.validateKeyResponseData(keyData);
-      const creditResponse = CreditResponse.fromKeyResponse(
-        validatedData,
-        correlationId,
-        proxyResponse.headers
-      );
-      const response = creditResponse
-        .withCacheHeaders('MISS')
-        .toExpressResponse();
+      // Add correlation ID
+      responseHeaders['X-Correlation-Id'] = correlationId;
 
-      return res
-        .status(response.status)
-        .set(response.headers)
-        .json(response.body);
+      res.status(proxyResponse.status).set(responseHeaders);
+
+      if (proxyResponse.data !== undefined) {
+        return res.json(proxyResponse.data);
+      } else {
+        return res.end();
+      }
     } catch (error) {
       const errorResponse = CreditResponse.createErrorResponse(
         'INTERNAL_ERROR',

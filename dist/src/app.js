@@ -224,17 +224,16 @@ function createApp() {
                     .set(errorResponse.headers)
                     .json(errorResponse.body);
             }
-            const openRouterResponse = proxyResponse.data;
-            const keyData = openRouterResponse.data;
-            const validatedData = CreditResponse_1.CreditResponse.validateKeyResponseData(keyData);
-            const creditResponse = CreditResponse_1.CreditResponse.fromKeyResponse(validatedData, correlationId, proxyResponse.headers);
-            const response = creditResponse
-                .withCacheHeaders('MISS')
-                .toExpressResponse();
-            return res
-                .status(response.status)
-                .set(response.headers)
-                .json(response.body);
+            const responseHeaders = { ...proxyResponse.headers };
+            delete responseHeaders['transfer-encoding'];
+            responseHeaders['X-Correlation-Id'] = correlationId;
+            res.status(proxyResponse.status).set(responseHeaders);
+            if (proxyResponse.data !== undefined) {
+                return res.json(proxyResponse.data);
+            }
+            else {
+                return res.end();
+            }
         }
         catch (error) {
             const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse('INTERNAL_ERROR', error instanceof Error ? error.message : 'Internal server error', 500, correlationId);

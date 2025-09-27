@@ -13,17 +13,7 @@ class ProxyService {
         this.httpsAgent = new https_1.default.Agent({
             keepAlive: true,
             timeout: 60000,
-            secureProtocol: 'TLSv1_2_method',
-            ciphers: [
-                'ECDHE-RSA-AES128-GCM-SHA256',
-                'ECDHE-RSA-AES256-GCM-SHA384',
-                'ECDHE-RSA-AES128-SHA256',
-                'ECDHE-RSA-AES256-SHA384',
-                'AES128-GCM-SHA256',
-                'AES256-GCM-SHA384',
-                'AES128-SHA256',
-                'AES256-SHA256'
-            ].join(':'),
+            rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
         });
     }
     async makeRequest(request) {

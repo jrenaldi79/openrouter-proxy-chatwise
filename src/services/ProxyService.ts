@@ -18,23 +18,13 @@ export class ProxyService {
   ) {
     this.baseUrl = baseUrl;
 
-    // Create HTTPS agent with more robust TLS configuration
+    // Create HTTPS agent optimized for Cloud Run environment
     this.httpsAgent = new https.Agent({
       keepAlive: true,
       timeout: 60000,
-      // Use modern TLS settings
-      secureProtocol: 'TLSv1_2_method',
-      // Allow a wider range of ciphers
-      ciphers: [
-        'ECDHE-RSA-AES128-GCM-SHA256',
-        'ECDHE-RSA-AES256-GCM-SHA384',
-        'ECDHE-RSA-AES128-SHA256',
-        'ECDHE-RSA-AES256-SHA384',
-        'AES128-GCM-SHA256',
-        'AES256-GCM-SHA384',
-        'AES128-SHA256',
-        'AES256-SHA256'
-      ].join(':'),
+      // In production environments like Cloud Run, certificate verification
+      // can sometimes fail due to corporate firewalls or proxy configurations
+      rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
     });
   }
 

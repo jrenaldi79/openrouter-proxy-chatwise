@@ -226,10 +226,46 @@ export class OpenRouterRequest {
       url.searchParams.set(key, value);
     });
 
+    // Filter out problematic headers that cause SSL/TLS issues
+    const problematicHeaders = new Set([
+      'host',
+      'connection',
+      'upgrade',
+      'proxy-authenticate',
+      'proxy-authorization',
+      'te',
+      'trailer',
+      'transfer-encoding',
+      // HTTP/2 specific headers that shouldn't be in HTTP/1.1
+      ':authority',
+      ':method',
+      ':path',
+      ':scheme',
+      // Express/Node.js specific headers
+      'x-forwarded-for',
+      'x-forwarded-proto',
+      'x-forwarded-host',
+      'x-real-ip',
+      // Cache control headers that might interfere
+      'if-modified-since',
+      'if-none-match',
+      'if-range',
+      'if-unmodified-since',
+      'range'
+    ]);
+
+    // Copy all headers except problematic ones
+    const safeHeaders: Record<string, string> = {};
+    Object.entries(proxyRequest.headers).forEach(([key, value]) => {
+      if (!problematicHeaders.has(key.toLowerCase()) && typeof value === 'string') {
+        safeHeaders[key] = value;
+      }
+    });
+
     return new OpenRouterRequest({
       url: url.toString(),
       method: proxyRequest.method,
-      headers: proxyRequest.headers,
+      headers: safeHeaders,
       body: proxyRequest.body,
       timeout,
       retryConfig,

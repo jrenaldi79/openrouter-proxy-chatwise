@@ -81,7 +81,7 @@ jobs:
           --source . \
           --region us-central1 \
           --allow-unauthenticated \
-          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=staging \
+          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=staging,NODE_TLS_REJECT_UNAUTHORIZED=0 \
           --memory 256Mi \
           --timeout 300 \
           --min-instances 0 \
@@ -173,7 +173,7 @@ jobs:
           --source . \
           --region us-central1 \
           --allow-unauthenticated \
-          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=production \
+          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=production,NODE_TLS_REJECT_UNAUTHORIZED=0 \
           --memory 512Mi \
           --timeout 300 \
           --min-instances 1 \

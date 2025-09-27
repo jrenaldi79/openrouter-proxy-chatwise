@@ -34,7 +34,7 @@ function createApp() {
         app.set('trust proxy', true);
     }
     app.use((req, res, next) => {
-        if (req.path === '/v1/credits' || req.path === '/api/v1/credits' || req.path === '/api/v1/me/credits' || req.path === '/v1/models' || req.path === '/v1/auth/key') {
+        if (req.path === '/v1/credits' || req.path === '/api/v1/credits' || req.path === '/api/v1/me/credits' || req.path === '/v1/models' || req.path === '/v1/auth/key' || req.path === '/v1/chat/completions') {
             return next();
         }
         (0, helmet_1.default)()(req, res, next);
@@ -521,6 +521,20 @@ function createApp() {
                     return;
                 }
                 console.log(`[${correlationId}] Cloudflare blocked endpoint: ${req.path}`);
+            }
+            if (req.path === '/chat/completions') {
+                res.writeHead(proxyResponse.status, {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'X-Correlation-Id': correlationId,
+                });
+                if (proxyResponse.data !== undefined) {
+                    res.end(JSON.stringify(proxyResponse.data));
+                }
+                else {
+                    res.end();
+                }
+                return;
             }
             const responseHeaders = { ...proxyResponse.headers };
             delete responseHeaders['transfer-encoding'];

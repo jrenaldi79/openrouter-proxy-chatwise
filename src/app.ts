@@ -38,7 +38,7 @@ export function createApp(): Express {
 
   // Security middleware - skip for specific endpoints to match OpenRouter headers
   app.use((req, res, next) => {
-    if (req.path === '/v1/credits' || req.path === '/api/v1/credits' || req.path === '/api/v1/me/credits' || req.path === '/v1/models' || req.path === '/v1/auth/key') {
+    if (req.path === '/v1/credits' || req.path === '/api/v1/credits' || req.path === '/api/v1/me/credits' || req.path === '/v1/models' || req.path === '/v1/auth/key' || req.path === '/v1/chat/completions') {
       // Skip helmet for these endpoints to match OpenRouter exactly
       return next();
     }
@@ -798,7 +798,22 @@ export function createApp(): Express {
         console.log(`[${correlationId}] Cloudflare blocked endpoint: ${req.path}`);
       }
 
-      // Forward response exactly as received
+      // For /v1/chat/completions, use clean headers to match OpenRouter exactly
+      if (req.path === '/chat/completions') {
+        res.writeHead(proxyResponse.status, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+        if (proxyResponse.data !== undefined) {
+          res.end(JSON.stringify(proxyResponse.data));
+        } else {
+          res.end();
+        }
+        return;
+      }
+
+      // Forward response exactly as received for other endpoints
       const responseHeaders = { ...proxyResponse.headers };
       delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
 

@@ -66,6 +66,17 @@ export class ProxyService {
   private async executeRequest(
     request: OpenRouterRequest
   ): Promise<AxiosResponse> {
+    // Try fetch API first in production for better SSL compatibility
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const response = await this.executeFetchRequest(request);
+        return response;
+      } catch (fetchError) {
+        // Fallback to axios if fetch fails
+        console.warn('Fetch failed, falling back to axios:', fetchError);
+      }
+    }
+
     const config = {
       method: request.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch',
       url: request.url,
@@ -77,6 +88,43 @@ export class ProxyService {
     };
 
     return await axios(config);
+  }
+
+  private async executeFetchRequest(
+    request: OpenRouterRequest
+  ): Promise<AxiosResponse> {
+    const fetchOptions: RequestInit = {
+      method: request.method,
+      headers: request.headers as Record<string, string>,
+      body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : null,
+    };
+
+    const response = await fetch(request.url, fetchOptions);
+
+    // Convert fetch response to axios-like response
+    let data: unknown;
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+
+    // Convert Headers to plain object
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+      data,
+      config: {},
+      request: {},
+    } as AxiosResponse;
   }
 
   private formatResponse(response: AxiosResponse): ProxyResponse {

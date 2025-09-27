@@ -39,6 +39,15 @@ class ProxyService {
         throw this.formatError(lastError);
     }
     async executeRequest(request) {
+        if (process.env.NODE_ENV === 'production') {
+            try {
+                const response = await this.executeFetchRequest(request);
+                return response;
+            }
+            catch (fetchError) {
+                console.warn('Fetch failed, falling back to axios:', fetchError);
+            }
+        }
         const config = {
             method: request.method.toLowerCase(),
             url: request.url,
@@ -49,6 +58,34 @@ class ProxyService {
             httpsAgent: this.httpsAgent,
         };
         return await (0, axios_1.default)(config);
+    }
+    async executeFetchRequest(request) {
+        const fetchOptions = {
+            method: request.method,
+            headers: request.headers,
+            body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : null,
+        };
+        const response = await fetch(request.url, fetchOptions);
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        }
+        else {
+            data = await response.text();
+        }
+        const headers = {};
+        response.headers.forEach((value, key) => {
+            headers[key] = value;
+        });
+        return {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+            data,
+            config: {},
+            request: {},
+        };
     }
     formatResponse(response) {
         return {

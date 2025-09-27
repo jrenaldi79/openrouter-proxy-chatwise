@@ -227,7 +227,7 @@ export class HealthStatus {
   }
 
   public static createUnhealthy(
-    _reason: string = 'OpenRouter unavailable',
+    reason: string = 'OpenRouter unavailable',
     version: string = '1.0.0'
   ): HealthStatus {
     return HealthStatus.create('disconnected', undefined, Date.now(), version);

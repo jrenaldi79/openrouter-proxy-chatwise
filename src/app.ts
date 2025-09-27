@@ -82,7 +82,7 @@ export function createApp(): Express {
   // Handle body parser errors (like payload too large)
   app.use(
     (
-      error: any,
+      error: Error & { type?: string },
       req: express.Request,
       res: express.Response,
       next: express.NextFunction
@@ -145,7 +145,7 @@ export function createApp(): Express {
       const response = healthStatus.toExpressResponse();
 
       res.status(response.status).set(response.headers).json(response.body);
-    } catch (_error) {
+    } catch {
       const healthStatus = HealthStatus.createUnhealthy(
         'Health check failed',
         '1.0.0'
@@ -996,18 +996,21 @@ export function createApp(): Express {
         targetOptions.method = req.method;
         targetOptions.headers = proxyHeaders;
 
-        const proxyReq = https.request(targetOptions, (proxyRes: any) => {
-          // Forward status and headers
-          res.status(proxyRes.statusCode);
+        const proxyReq = https.request(
+          targetOptions,
+          (proxyRes: import('http').IncomingMessage) => {
+            // Forward status and headers
+            res.status(proxyRes.statusCode);
 
-          // Forward headers but clean them up
-          const responseHeaders = { ...proxyRes.headers };
-          delete responseHeaders['transfer-encoding'];
-          res.set(responseHeaders);
+            // Forward headers but clean them up
+            const responseHeaders = { ...proxyRes.headers };
+            delete responseHeaders['transfer-encoding'];
+            res.set(responseHeaders);
 
-          // Pipe the streaming response directly
-          proxyRes.pipe(res);
-        });
+            // Pipe the streaming response directly
+            proxyRes.pipe(res);
+          }
+        );
 
         proxyReq.on('error', (error: Error) => {
           console.error(`[${correlationId}] Streaming proxy error:`, error);
@@ -1211,7 +1214,7 @@ export function createApp(): Express {
   });
 
   // 404 handler for non-API routes (using middleware approach for Express 5)
-  app.use((req, res, _next) => {
+  app.use((req, res) => {
     const correlationId = req.correlationId as string;
     res.status(404).json({
       error: {
@@ -1225,12 +1228,15 @@ export function createApp(): Express {
   // Error handler
   app.use(
     (
-      _error: Error,
+      error: Error,
       req: express.Request,
       res: express.Response,
-      _next: express.NextFunction
+      next: express.NextFunction
     ) => {
       const correlationId = req.correlationId || uuidv4();
+
+      // Log the error for debugging
+      console.error('Unhandled error:', error.message, { correlationId });
 
       res.status(500).json({
         error: {

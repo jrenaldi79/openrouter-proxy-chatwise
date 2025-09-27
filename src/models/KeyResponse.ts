@@ -14,7 +14,7 @@ export class KeyResponse {
     this.usage = data.usage;
 
     // Store any additional fields from the response
-    const { limit, usage, ...rest } = data;
+    const { limit: _limit, usage: _usage, ...rest } = data;
     this.additionalFields = rest;
 
     this.validate();

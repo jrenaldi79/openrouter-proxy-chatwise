@@ -345,21 +345,25 @@ export function createApp(): Express {
           .json(errorResponse.body);
       }
 
-      // Return the original OpenRouter response format (same as /v1/auth/key)
-      // Don't transform - just forward the auth/key response directly
-      const responseHeaders = { ...proxyResponse.headers };
-      delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
+      // Transform auth/key response to credits API format as per OpenRouter docs
+      // https://openrouter.ai/docs/api-reference/get-credits
+      const openRouterResponse = proxyResponse.data as { data?: unknown };
+      const keyData = openRouterResponse.data;
 
-      // Add correlation ID
-      responseHeaders['X-Correlation-Id'] = correlationId;
+      const validatedData = CreditResponse.validateKeyResponseData(keyData);
+      const creditResponse = CreditResponse.fromKeyResponse(
+        validatedData,
+        correlationId,
+        proxyResponse.headers
+      );
+      const response = creditResponse
+        .withCacheHeaders('MISS')
+        .toExpressResponse();
 
-      res.status(proxyResponse.status).set(responseHeaders);
-
-      if (proxyResponse.data !== undefined) {
-        return res.json(proxyResponse.data);
-      } else {
-        return res.end();
-      }
+      return res
+        .status(response.status)
+        .set(response.headers)
+        .json(response.body);
     } catch (error) {
       const errorResponse = CreditResponse.createErrorResponse(
         'INTERNAL_ERROR',

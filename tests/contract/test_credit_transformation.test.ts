@@ -26,8 +26,10 @@ describe('Credit Transformation Contract Tests', () => {
     it('should transform limited account response correctly', async () => {
       // Mock OpenRouter /api/v1/key response for limited account
       const openRouterKeyResponse = {
-        limit: 100.5,
-        usage: 25.75,
+        data: {
+          limit: 100.5,
+          usage: 25.75,
+        }
       };
 
       const openRouterMock = nock('https://openrouter.ai')
@@ -37,8 +39,16 @@ describe('Credit Transformation Contract Tests', () => {
 
       const response = await request(app)
         .get('/api/v1/me/credits')
-        .set('Authorization', validApiKey)
-        .expect(200);
+        .set('Authorization', validApiKey);
+
+      // Debug: Log the actual response for troubleshooting
+      if (response.status !== 200) {
+        console.log('Response status:', response.status);
+        console.log('Response body:', response.body);
+        console.log('Response text:', response.text);
+      }
+
+      expect(response.status).toBe(200);
 
       // Verify transformed response structure
       expect(response.body).toHaveProperty('data');
@@ -63,8 +73,10 @@ describe('Credit Transformation Contract Tests', () => {
     it('should transform unlimited account response correctly', async () => {
       // Mock OpenRouter /api/v1/key response for unlimited account
       const openRouterKeyResponse = {
-        limit: null,
-        usage: 125.3,
+        data: {
+          limit: null,
+          usage: 125.3,
+        }
       };
 
       const openRouterMock = nock('https://openrouter.ai')
@@ -86,8 +98,10 @@ describe('Credit Transformation Contract Tests', () => {
 
     it('should handle zero usage correctly', async () => {
       const openRouterKeyResponse = {
-        limit: 50.0,
-        usage: 0,
+        data: {
+          limit: 50.0,
+          usage: 0,
+        }
       };
 
       const openRouterMock = nock('https://openrouter.ai')
@@ -181,7 +195,7 @@ describe('Credit Transformation Contract Tests', () => {
     });
 
     it('should have correct Content-Type for successful responses', async () => {
-      const openRouterKeyResponse = { limit: 100, usage: 25 };
+      const openRouterKeyResponse = { data: { limit: 100, usage: 25 } };
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
@@ -207,7 +221,7 @@ describe('Credit Transformation Contract Tests', () => {
     });
 
     it('should respond within performance requirements', async () => {
-      const openRouterKeyResponse = { limit: 100, usage: 25 };
+      const openRouterKeyResponse = { data: { limit: 100, usage: 25 } };
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
@@ -229,7 +243,7 @@ describe('Credit Transformation Contract Tests', () => {
 
   describe('Caching behavior validation', () => {
     const validApiKey = 'Bearer sk-or-v1-test-key-123';
-    const openRouterKeyResponse = { limit: 100, usage: 25 };
+    const openRouterKeyResponse = { data: { limit: 100, usage: 25 } };
 
     it('should cache responses for subsequent requests', async () => {
       // First request should hit OpenRouter

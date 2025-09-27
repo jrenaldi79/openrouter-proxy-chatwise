@@ -14,14 +14,14 @@
     "test:integration": "jest tests/integration",
     "test:contract": "jest tests/contract",
     "test:performance": "jest tests/performance",
+    "test:local": "npm run test",
+    "test:production": "node scripts/test-production.js",
+    "test:production:jest": "jest --config=jest.production.config.js",
     "lint": "eslint src tests --ext .ts",
     "lint:fix": "eslint src tests --ext .ts --fix",
     "format": "prettier --write src tests",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "docker:build": "docker build -t openrouter-proxy .",
-    "docker:run": "docker run -p 3000:3000 openrouter-proxy",
-    "test:real-api": "node scripts/test-real-api.js"
+    "clean": "rm -rf dist"
   },
   "keywords": [
     "openrouter",
@@ -47,40 +47,6 @@
     "winston": "^3.17.0",
     "typescript": "^5.9.2",
     "ts-node": "^10.9.2"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/src",
-      "<rootDir>/tests"
-    ],
-    "testMatch": [
-      "**/__tests__/**/*.ts",
-      "**/?(*.)+(spec|test).ts"
-    ],
-    "transform": {
-      "^.+\\.ts$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "src/**/*.ts",
-      "!src/**/*.d.ts",
-      "!src/app.ts"
-    ],
-    "coverageDirectory": "coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 90,
-        "functions": 90,
-        "lines": 90,
-        "statements": 90
-      }
-    }
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

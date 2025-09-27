@@ -251,13 +251,16 @@ export class OpenRouterRequest {
       'if-none-match',
       'if-range',
       'if-unmodified-since',
-      'range'
+      'range',
     ]);
 
     // Copy all headers except problematic ones
     const safeHeaders: Record<string, string> = {};
     Object.entries(proxyRequest.headers).forEach(([key, value]) => {
-      if (!problematicHeaders.has(key.toLowerCase()) && typeof value === 'string') {
+      if (
+        !problematicHeaders.has(key.toLowerCase()) &&
+        typeof value === 'string'
+      ) {
         safeHeaders[key] = value;
       }
     });

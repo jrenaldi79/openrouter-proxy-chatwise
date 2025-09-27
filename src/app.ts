@@ -1000,7 +1000,7 @@ export function createApp(): Express {
           targetOptions,
           (proxyRes: import('http').IncomingMessage) => {
             // Forward status and headers
-            res.status(proxyRes.statusCode);
+            res.status(proxyRes.statusCode || 500);
 
             // Forward headers but clean them up
             const responseHeaders = { ...proxyRes.headers };

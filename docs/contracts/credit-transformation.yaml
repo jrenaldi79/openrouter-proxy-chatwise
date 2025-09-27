@@ -16,7 +16,7 @@ paths:
           schema:
             type: string
             pattern: '^Bearer sk-or-v1-.*'
-          example: "Bearer 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"
+          example: "Bearer sk-or-v1-66db6cd4941cae4b66a5a1dd96e04a732f6624f5d0725824ee7839ceabdbxxxx"
       responses:
         '200':
           description: Credit information in expected format

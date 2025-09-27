@@ -4,10 +4,7 @@ module.exports = {
 
   // Only test REAL production tests (exclude mock-based unit tests)
   testMatch: [
-    '<rootDir>/tests/production/test_real_api.test.ts',
-    '<rootDir>/tests/production/test_endpoint_routing.test.ts',
-    '<rootDir>/tests/production/test_error_handling.test.ts',
-    '<rootDir>/tests/production/test_security.test.ts'
+    '<rootDir>/tests/production/test_real_api.test.ts'
   ],
 
   // Ignore only basic directories

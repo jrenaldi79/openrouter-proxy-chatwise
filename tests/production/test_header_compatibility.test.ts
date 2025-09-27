@@ -26,9 +26,13 @@ describe('Header Compatibility Integration Tests', () => {
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, { data: { limit: 100, usage: 25 } }, {
-          'content-type': 'application/json', // OpenRouter format
-        });
+        .reply(
+          200,
+          { data: { limit: 100, usage: 25 } },
+          {
+            'content-type': 'application/json', // OpenRouter format
+          }
+        );
 
       // Action: Test /v1/credits endpoint
       const response = await request(app)
@@ -84,9 +88,9 @@ describe('Header Compatibility Integration Tests', () => {
         .reply(200, {
           data: {
             api_key: validApiKey.replace('Bearer ', ''),
-            name: "Test Key",
-            is_valid: true
-          }
+            name: 'Test Key',
+            is_valid: true,
+          },
         });
 
       const response = await request(app)
@@ -104,10 +108,14 @@ describe('Header Compatibility Integration Tests', () => {
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, { data: { limit: 100, usage: 25 } }, {
-          'access-control-allow-origin': '*',
-          'content-type': 'application/json',
-        });
+        .reply(
+          200,
+          { data: { limit: 100, usage: 25 } },
+          {
+            'access-control-allow-origin': '*',
+            'content-type': 'application/json',
+          }
+        );
 
       const response = await request(app)
         .get('/v1/credits')
@@ -180,7 +188,7 @@ describe('Header Compatibility Integration Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           id: 'chatcmpl-test',
-          choices: [{ message: { content: 'Hello' } }]
+          choices: [{ message: { content: 'Hello' } }],
         });
 
       const response = await request(app)
@@ -189,7 +197,7 @@ describe('Header Compatibility Integration Tests', () => {
         .send({
           model: 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: 'Hello' }],
-          stream: false
+          stream: false,
         })
         .expect(200);
 
@@ -204,10 +212,14 @@ describe('Header Compatibility Integration Tests', () => {
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, { data: { limit: 100, usage: 25 } }, {
-          'Content-Type': 'application/json', // Capital case
-          'X-Custom-Header': 'test-value',
-        });
+        .reply(
+          200,
+          { data: { limit: 100, usage: 25 } },
+          {
+            'Content-Type': 'application/json', // Capital case
+            'X-Custom-Header': 'test-value',
+          }
+        );
 
       const response = await request(app)
         .get('/v1/credits')
@@ -235,8 +247,8 @@ describe('Header Compatibility Integration Tests', () => {
       expect(response.body).toEqual({
         data: {
           total_credits: 100.5,
-          total_usage: 25.75
-        }
+          total_usage: 25.75,
+        },
       });
 
       // Verify exact content-type that should pass validation
@@ -265,14 +277,18 @@ describe('Header Compatibility Integration Tests', () => {
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(402, {
-          error: {
-            code: 'INSUFFICIENT_CREDITS',
-            message: 'Insufficient credits'
+        .reply(
+          402,
+          {
+            error: {
+              code: 'INSUFFICIENT_CREDITS',
+              message: 'Insufficient credits',
+            },
+          },
+          {
+            'content-type': 'application/json',
           }
-        }, {
-          'content-type': 'application/json',
-        });
+        );
 
       const response = await request(app)
         .get('/v1/credits')

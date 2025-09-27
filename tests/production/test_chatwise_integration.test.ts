@@ -35,18 +35,14 @@ describe('ChatWise Integration Pattern Tests', () => {
           data: {
             api_key: validApiKey.replace('Bearer ', ''),
             name: 'ChatWise API Key',
-            is_valid: true
-          }
+            is_valid: true,
+          },
         });
 
       // Action: Simulate ChatWise calling both endpoints
       const [creditsResponse, authResponse] = await Promise.all([
-        request(app)
-          .get('/v1/credits')
-          .set('Authorization', validApiKey),
-        request(app)
-          .get('/v1/auth/key')
-          .set('Authorization', validApiKey)
+        request(app).get('/v1/credits').set('Authorization', validApiKey),
+        request(app).get('/v1/auth/key').set('Authorization', validApiKey),
       ]);
 
       // Verification: Credits endpoint should transform response
@@ -56,7 +52,9 @@ describe('ChatWise Integration Pattern Tests', () => {
 
       // Verification: Auth key endpoint should pass through unchanged
       expect(authResponse.status).toBe(200);
-      expect(authResponse.body.data.api_key).toBe(validApiKey.replace('Bearer ', ''));
+      expect(authResponse.body.data.api_key).toBe(
+        validApiKey.replace('Bearer ', '')
+      );
       expect(authResponse.body.data.name).toBe('ChatWise API Key');
       expect(authResponse.body.data.is_valid).toBe(true);
 
@@ -78,15 +76,15 @@ describe('ChatWise Integration Pattern Tests', () => {
               id: 'gpt-3.5-turbo',
               name: 'GPT-3.5 Turbo',
               description: 'Fast and affordable GPT model',
-              pricing: { prompt: '0.0015', completion: '0.002' }
+              pricing: { prompt: '0.0015', completion: '0.002' },
             },
             {
               id: 'gpt-4',
               name: 'GPT-4',
               description: 'Most capable GPT model',
-              pricing: { prompt: '0.03', completion: '0.06' }
-            }
-          ]
+              pricing: { prompt: '0.03', completion: '0.06' },
+            },
+          ],
         });
 
       const response = await request(app)
@@ -111,7 +109,7 @@ describe('ChatWise Integration Pattern Tests', () => {
         'data: {"id":"chatcmpl-123","choices":[{"delta":{"content":"Hello"}}]}\n\n',
         'data: {"id":"chatcmpl-123","choices":[{"delta":{"content":" from"}}]}\n\n',
         'data: {"id":"chatcmpl-123","choices":[{"delta":{"content":" ChatWise"}}]}\n\n',
-        'data: [DONE]\n\n'
+        'data: [DONE]\n\n',
       ].join('');
 
       const chatMock = nock('https://openrouter.ai')
@@ -120,7 +118,7 @@ describe('ChatWise Integration Pattern Tests', () => {
         .reply(200, streamingData, {
           'content-type': 'text/event-stream',
           'cache-control': 'no-cache',
-          'connection': 'keep-alive'
+          connection: 'keep-alive',
         });
 
       const response = await request(app)
@@ -129,7 +127,7 @@ describe('ChatWise Integration Pattern Tests', () => {
         .send({
           model: 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: 'Hello from ChatWise' }],
-          stream: true
+          stream: true,
         })
         .expect(200);
 
@@ -149,11 +147,13 @@ describe('ChatWise Integration Pattern Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           id: 'chatcmpl-title-123',
-          choices: [{
-            message: {
-              content: 'OpenRouter API Discussion'
-            }
-          }]
+          choices: [
+            {
+              message: {
+                content: 'OpenRouter API Discussion',
+              },
+            },
+          ],
         });
 
       const response = await request(app)
@@ -162,16 +162,21 @@ describe('ChatWise Integration Pattern Tests', () => {
         .send({
           model: 'gpt-3.5-turbo',
           messages: [
-            { role: 'system', content: 'Generate a short title for this conversation' },
-            { role: 'user', content: 'I want to test the OpenRouter proxy' }
+            {
+              role: 'system',
+              content: 'Generate a short title for this conversation',
+            },
+            { role: 'user', content: 'I want to test the OpenRouter proxy' },
           ],
           max_tokens: 20,
           temperature: 0.7,
-          stream: false
+          stream: false,
         })
         .expect(200);
 
-      expect(response.body.choices[0].message.content).toBe('OpenRouter API Discussion');
+      expect(response.body.choices[0].message.content).toBe(
+        'OpenRouter API Discussion'
+      );
       expect(response.headers['content-type']).toBe('application/json');
 
       expect(titleMock.isDone()).toBe(true);
@@ -186,7 +191,7 @@ describe('ChatWise Integration Pattern Tests', () => {
       const creditsKeyMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, { data: { limit: 75.25, usage: 12.50 } });
+        .reply(200, { data: { limit: 75.25, usage: 12.5 } });
 
       const response = await request(app)
         .get('/v1/credits')
@@ -197,8 +202,8 @@ describe('ChatWise Integration Pattern Tests', () => {
       expect(response.body).toEqual({
         data: {
           total_credits: 75.25,
-          total_usage: 12.50
-        }
+          total_usage: 12.5,
+        },
       });
 
       // Exact headers that should pass ChatWise validation
@@ -217,10 +222,12 @@ describe('ChatWise Integration Pattern Tests', () => {
       const creditsKeyMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, { data: {
-          limit: 123.456789, // High precision
-          usage: 45.123456
-        } });
+        .reply(200, {
+          data: {
+            limit: 123.456789, // High precision
+            usage: 45.123456,
+          },
+        });
 
       const response = await request(app)
         .get('/v1/credits')
@@ -238,10 +245,12 @@ describe('ChatWise Integration Pattern Tests', () => {
       const creditsKeyMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, { data: {
-          limit: null, // Unlimited account
-          usage: 1234.56
-        } });
+        .reply(200, {
+          data: {
+            limit: null, // Unlimited account
+            usage: 1234.56,
+          },
+        });
 
       const response = await request(app)
         .get('/v1/credits')
@@ -262,8 +271,8 @@ describe('ChatWise Integration Pattern Tests', () => {
         .reply(402, {
           error: {
             code: 'INSUFFICIENT_CREDITS',
-            message: 'Insufficient credits for this request'
-          }
+            message: 'Insufficient credits for this request',
+          },
         });
 
       const response = await request(app)
@@ -339,15 +348,18 @@ describe('ChatWise Integration Pattern Tests', () => {
     });
 
     it('should handle ChatWise streaming performance requirements', async () => {
-      const streamingData = Array.from({ length: 10 }, (_, i) =>
-        `data: {"id":"chatcmpl-123","choices":[{"delta":{"content":"Token ${i}"}}]}\n\n`
-      ).join('') + 'data: [DONE]\n\n';
+      const streamingData =
+        Array.from(
+          { length: 10 },
+          (_, i) =>
+            `data: {"id":"chatcmpl-123","choices":[{"delta":{"content":"Token ${i}"}}]}\n\n`
+        ).join('') + 'data: [DONE]\n\n';
 
       const chatMock = nock('https://openrouter.ai')
         .post('/api/v1/chat/completions')
         .matchHeader('authorization', validApiKey)
         .reply(200, streamingData, {
-          'content-type': 'text/event-stream'
+          'content-type': 'text/event-stream',
         });
 
       const startTime = Date.now();
@@ -358,7 +370,7 @@ describe('ChatWise Integration Pattern Tests', () => {
         .send({
           model: 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: 'Stream test' }],
-          stream: true
+          stream: true,
         })
         .expect(200);
 
@@ -383,8 +395,8 @@ describe('ChatWise Integration Pattern Tests', () => {
         .reply(401, {
           error: {
             code: 'UNAUTHORIZED',
-            message: 'Invalid API key'
-          }
+            message: 'Invalid API key',
+          },
         });
 
       const response = await request(app)
@@ -403,14 +415,18 @@ describe('ChatWise Integration Pattern Tests', () => {
       const rateLimitMock = nock('https://openrouter.ai')
         .get('/api/v1/key')
         .matchHeader('authorization', validApiKey)
-        .reply(429, {
-          error: {
-            code: 'RATE_LIMIT_EXCEEDED',
-            message: 'Rate limit exceeded'
+        .reply(
+          429,
+          {
+            error: {
+              code: 'RATE_LIMIT_EXCEEDED',
+              message: 'Rate limit exceeded',
+            },
+          },
+          {
+            'retry-after': '60',
           }
-        }, {
-          'retry-after': '60'
-        });
+        );
 
       const response = await request(app)
         .get('/v1/credits')
@@ -452,11 +468,13 @@ describe('ChatWise Integration Pattern Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           id: 'chatcmpl-special',
-          choices: [{
-            message: {
-              content: 'Response with special chars: éñüñ 中文 🚀'
-            }
-          }]
+          choices: [
+            {
+              message: {
+                content: 'Response with special chars: éñüñ 中文 🚀',
+              },
+            },
+          ],
         });
 
       const response = await request(app)
@@ -464,15 +482,19 @@ describe('ChatWise Integration Pattern Tests', () => {
         .set('Authorization', validApiKey)
         .send({
           model: 'gpt-3.5-turbo',
-          messages: [{
-            role: 'user',
-            content: 'Test with special chars: éñüñ 中文 🚀'
-          }]
+          messages: [
+            {
+              role: 'user',
+              content: 'Test with special chars: éñüñ 中文 🚀',
+            },
+          ],
         })
         .expect(200);
 
       // Should handle Unicode properly for ChatWise
-      expect(response.body.choices[0].message.content).toContain('éñüñ 中文 🚀');
+      expect(response.body.choices[0].message.content).toContain(
+        'éñüñ 中文 🚀'
+      );
 
       expect(chatMock.isDone()).toBe(true);
     });
@@ -485,7 +507,7 @@ describe('ChatWise Integration Pattern Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           id: 'chatcmpl-large',
-          choices: [{ message: { content: 'Processed large request' } }]
+          choices: [{ message: { content: 'Processed large request' } }],
         });
 
       const response = await request(app)
@@ -493,11 +515,13 @@ describe('ChatWise Integration Pattern Tests', () => {
         .set('Authorization', validApiKey)
         .send({
           model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: largeContent }]
+          messages: [{ role: 'user', content: largeContent }],
         })
         .expect(200);
 
-      expect(response.body.choices[0].message.content).toBe('Processed large request');
+      expect(response.body.choices[0].message.content).toBe(
+        'Processed large request'
+      );
 
       expect(chatMock.isDone()).toBe(true);
     });
@@ -505,7 +529,7 @@ describe('ChatWise Integration Pattern Tests', () => {
     it('should handle ChatWise API key format variations', async () => {
       const keyVariations = [
         'Bearer sk-or-v1-standard-format-key',
-        'Bearer sk-or-v1-longer-format-key-with-more-characters'
+        'Bearer sk-or-v1-longer-format-key-with-more-characters',
       ];
 
       for (const apiKey of keyVariations) {
@@ -515,8 +539,8 @@ describe('ChatWise Integration Pattern Tests', () => {
           .reply(200, {
             data: {
               api_key: apiKey.replace('Bearer ', ''),
-              is_valid: true
-            }
+              is_valid: true,
+            },
           });
 
         const response = await request(app)

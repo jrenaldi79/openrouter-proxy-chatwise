@@ -41,7 +41,14 @@ export function createApp(): Express {
 
   // Security middleware - skip for specific endpoints to match OpenRouter headers
   app.use((req, res, next) => {
-    if (req.path === '/v1/credits' || req.path === '/api/v1/credits' || req.path === '/api/v1/me/credits' || req.path === '/v1/models' || req.path === '/v1/auth/key' || req.path === '/v1/chat/completions') {
+    if (
+      req.path === '/v1/credits' ||
+      req.path === '/api/v1/credits' ||
+      req.path === '/api/v1/me/credits' ||
+      req.path === '/v1/models' ||
+      req.path === '/v1/auth/key' ||
+      req.path === '/v1/chat/completions'
+    ) {
       // Skip helmet for these endpoints to match OpenRouter exactly
       return next();
     }
@@ -77,9 +84,15 @@ export function createApp(): Express {
 
     // Debug logging for troubleshooting
     console.log(`[${correlationId}] ${req.method} ${req.path}`);
-    console.log(`[${correlationId}] Headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(
+      `[${correlationId}] Headers:`,
+      JSON.stringify(req.headers, null, 2)
+    );
     if (req.body && Object.keys(req.body).length > 0) {
-      console.log(`[${correlationId}] Body:`, JSON.stringify(req.body, null, 2));
+      console.log(
+        `[${correlationId}] Body:`,
+        JSON.stringify(req.body, null, 2)
+      );
     }
 
     next();
@@ -187,8 +200,8 @@ export function createApp(): Express {
           typeof proxyResponse.data === 'object' &&
             proxyResponse.data &&
             'error' in proxyResponse.data
-            ? (proxyResponse.data as { error: { message?: string } }).error.message ||
-                'OpenRouter API error'
+            ? (proxyResponse.data as { error: { message?: string } }).error
+                .message || 'OpenRouter API error'
             : 'OpenRouter API unavailable',
           statusCode,
           correlationId
@@ -295,8 +308,8 @@ export function createApp(): Express {
           typeof proxyResponse.data === 'object' &&
             proxyResponse.data &&
             'error' in proxyResponse.data
-            ? (proxyResponse.data as { error: { message?: string } }).error.message ||
-                'OpenRouter API error'
+            ? (proxyResponse.data as { error: { message?: string } }).error
+                .message || 'OpenRouter API error'
             : 'OpenRouter API unavailable',
           statusCode,
           correlationId
@@ -356,7 +369,10 @@ export function createApp(): Express {
   // Proxy passthrough for all other /api/v1/* endpoints (using middleware approach for Express 5)
   app.use('/api/v1', async (req, res, next) => {
     // Skip if this is the credits endpoint (already handled above)
-    if ((req.path === '/me/credits' || req.path === '/credits') && req.method === 'GET') {
+    if (
+      (req.path === '/me/credits' || req.path === '/credits') &&
+      req.method === 'GET'
+    ) {
       return next();
     }
 
@@ -463,8 +479,8 @@ export function createApp(): Express {
           typeof proxyResponse.data === 'object' &&
             proxyResponse.data &&
             'error' in proxyResponse.data
-            ? (proxyResponse.data as { error: { message?: string } }).error.message ||
-                'OpenRouter API error'
+            ? (proxyResponse.data as { error: { message?: string } }).error
+                .message || 'OpenRouter API error'
             : 'OpenRouter API unavailable',
           statusCode,
           correlationId
@@ -551,19 +567,27 @@ export function createApp(): Express {
       );
 
       // Check if we got blocked by Cloudflare (HTML response instead of JSON)
-      if (typeof proxyResponse.data === 'string' &&
-          proxyResponse.data.includes('<!DOCTYPE html>') &&
-          proxyResponse.data.includes('Cloudflare')) {
-
+      if (
+        typeof proxyResponse.data === 'string' &&
+        proxyResponse.data.includes('<!DOCTYPE html>') &&
+        proxyResponse.data.includes('Cloudflare')
+      ) {
         // If we have a real API key for testing, don't use mock - return the actual error
         const authHeader = req.headers.authorization as string;
-        if (authHeader && authHeader.includes('sk-or-v1-') && process.env.OPENROUTER_TEST_API_KEY) {
-          console.log(`[${correlationId}] Cloudflare blocked real API key - returning 502 error`);
+        if (
+          authHeader &&
+          authHeader.includes('sk-or-v1-') &&
+          process.env.OPENROUTER_TEST_API_KEY
+        ) {
+          console.log(
+            `[${correlationId}] Cloudflare blocked real API key - returning 502 error`
+          );
 
           const errorResponse = {
             error: {
               code: 'UPSTREAM_ERROR',
-              message: 'OpenRouter API blocked by Cloudflare - check network configuration',
+              message:
+                'OpenRouter API blocked by Cloudflare - check network configuration',
               correlationId,
             },
           };
@@ -577,15 +601,33 @@ export function createApp(): Express {
         }
 
         // In local development, return a mock models response to avoid Cloudflare blocking
-        console.log(`[${correlationId}] Cloudflare blocked - returning mock models response for local dev`);
+        console.log(
+          `[${correlationId}] Cloudflare blocked - returning mock models response for local dev`
+        );
 
         const mockModelsResponse = {
           data: [
-            { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", pricing: { prompt: "0.0015", completion: "0.002" } },
-            { id: "gpt-4", name: "GPT-4", pricing: { prompt: "0.03", completion: "0.06" } },
-            { id: "claude-3-haiku", name: "Claude 3 Haiku", pricing: { prompt: "0.00025", completion: "0.00125" } },
-            { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", pricing: { prompt: "0.00075", completion: "0.003" } }
-          ]
+            {
+              id: 'gpt-3.5-turbo',
+              name: 'GPT-3.5 Turbo',
+              pricing: { prompt: '0.0015', completion: '0.002' },
+            },
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              pricing: { prompt: '0.03', completion: '0.06' },
+            },
+            {
+              id: 'claude-3-haiku',
+              name: 'Claude 3 Haiku',
+              pricing: { prompt: '0.00025', completion: '0.00125' },
+            },
+            {
+              id: 'google/gemini-2.5-flash',
+              name: 'Gemini 2.5 Flash',
+              pricing: { prompt: '0.00075', completion: '0.003' },
+            },
+          ],
         };
 
         res.writeHead(200, {
@@ -656,19 +698,27 @@ export function createApp(): Express {
       );
 
       // Check if we got blocked by Cloudflare (HTML response instead of JSON)
-      if (typeof proxyResponse.data === 'string' &&
-          proxyResponse.data.includes('<!DOCTYPE html>') &&
-          proxyResponse.data.includes('Cloudflare')) {
-
+      if (
+        typeof proxyResponse.data === 'string' &&
+        proxyResponse.data.includes('<!DOCTYPE html>') &&
+        proxyResponse.data.includes('Cloudflare')
+      ) {
         // If we have a real API key for testing, don't use mock - return the actual error
         const authHeader = req.headers.authorization as string;
-        if (authHeader && authHeader.includes('sk-or-v1-') && process.env.OPENROUTER_TEST_API_KEY) {
-          console.log(`[${correlationId}] Cloudflare blocked real API key - returning 502 error`);
+        if (
+          authHeader &&
+          authHeader.includes('sk-or-v1-') &&
+          process.env.OPENROUTER_TEST_API_KEY
+        ) {
+          console.log(
+            `[${correlationId}] Cloudflare blocked real API key - returning 502 error`
+          );
 
           const errorResponse = {
             error: {
               code: 'UPSTREAM_ERROR',
-              message: 'OpenRouter API blocked by Cloudflare - check network configuration',
+              message:
+                'OpenRouter API blocked by Cloudflare - check network configuration',
               correlationId,
             },
           };
@@ -682,17 +732,20 @@ export function createApp(): Express {
         }
 
         // In local development, return a mock auth/key response to avoid Cloudflare blocking
-        console.log(`[${correlationId}] Cloudflare blocked - returning mock auth/key response for local dev`);
+        console.log(
+          `[${correlationId}] Cloudflare blocked - returning mock auth/key response for local dev`
+        );
 
         const mockAuthResponse = {
           data: {
-            name: "Local Development Mock",
-            models: ["gpt-3.5-turbo", "gpt-4", "claude-3-haiku"],
-            api_key: req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
+            name: 'Local Development Mock',
+            models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-haiku'],
+            api_key:
+              req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
             monthly_limit: 100000,
             usage: 0,
-            is_valid: true
-          }
+            is_valid: true,
+          },
         };
 
         res.writeHead(200, {
@@ -819,19 +872,27 @@ export function createApp(): Express {
       );
 
       // Check if we got blocked by Cloudflare (HTML response instead of JSON)
-      if (typeof proxyResponse.data === 'string' &&
-          proxyResponse.data.includes('<!DOCTYPE html>') &&
-          proxyResponse.data.includes('Cloudflare')) {
-
+      if (
+        typeof proxyResponse.data === 'string' &&
+        proxyResponse.data.includes('<!DOCTYPE html>') &&
+        proxyResponse.data.includes('Cloudflare')
+      ) {
         // If we have a real API key for testing, don't use mock - return the actual error
         const authHeader = req.headers.authorization as string;
-        if (authHeader && authHeader.includes('sk-or-v1-') && process.env.OPENROUTER_TEST_API_KEY) {
-          console.log(`[${correlationId}] Cloudflare blocked real API key on ${req.path} - returning 502 error`);
+        if (
+          authHeader &&
+          authHeader.includes('sk-or-v1-') &&
+          process.env.OPENROUTER_TEST_API_KEY
+        ) {
+          console.log(
+            `[${correlationId}] Cloudflare blocked real API key on ${req.path} - returning 502 error`
+          );
 
           const errorResponse = {
             error: {
               code: 'UPSTREAM_ERROR',
-              message: 'OpenRouter API blocked by Cloudflare - check network configuration',
+              message:
+                'OpenRouter API blocked by Cloudflare - check network configuration',
               correlationId,
             },
           };
@@ -841,15 +902,33 @@ export function createApp(): Express {
 
         // Return appropriate mock response based on the endpoint
         if (req.path === '/models') {
-          console.log(`[${correlationId}] Cloudflare blocked - returning mock models response for local dev`);
+          console.log(
+            `[${correlationId}] Cloudflare blocked - returning mock models response for local dev`
+          );
 
           const mockModelsResponse = {
             data: [
-              { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", pricing: { prompt: "0.0015", completion: "0.002" } },
-              { id: "gpt-4", name: "GPT-4", pricing: { prompt: "0.03", completion: "0.06" } },
-              { id: "claude-3-haiku", name: "Claude 3 Haiku", pricing: { prompt: "0.00025", completion: "0.00125" } },
-              { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", pricing: { prompt: "0.00075", completion: "0.003" } }
-            ]
+              {
+                id: 'gpt-3.5-turbo',
+                name: 'GPT-3.5 Turbo',
+                pricing: { prompt: '0.0015', completion: '0.002' },
+              },
+              {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                pricing: { prompt: '0.03', completion: '0.06' },
+              },
+              {
+                id: 'claude-3-haiku',
+                name: 'Claude 3 Haiku',
+                pricing: { prompt: '0.00025', completion: '0.00125' },
+              },
+              {
+                id: 'google/gemini-2.5-flash',
+                name: 'Gemini 2.5 Flash',
+                pricing: { prompt: '0.00075', completion: '0.003' },
+              },
+            ],
           };
 
           res.status(200).set({
@@ -862,7 +941,9 @@ export function createApp(): Express {
         }
 
         // For other endpoints, log and continue with original error handling
-        console.log(`[${correlationId}] Cloudflare blocked endpoint: ${req.path}`);
+        console.log(
+          `[${correlationId}] Cloudflare blocked endpoint: ${req.path}`
+        );
       }
 
       // For /v1/chat/completions, use clean headers to match OpenRouter exactly
@@ -919,17 +1000,24 @@ export function createApp(): Express {
   });
 
   // Error handler
-  app.use((_error: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const correlationId = req.correlationId || uuidv4();
+  app.use(
+    (
+      _error: Error,
+      req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction
+    ) => {
+      const correlationId = req.correlationId || uuidv4();
 
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        correlationId,
-      },
-    });
-  });
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          correlationId,
+        },
+      });
+    }
+  );
 
   return app;
 }

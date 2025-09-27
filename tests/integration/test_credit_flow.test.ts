@@ -117,7 +117,9 @@ describe('Credit Transformation Flow Integration Tests', () => {
         const openRouterMock = nock('https://openrouter.ai')
           .get('/api/v1/key')
           .matchHeader('authorization', validApiKey)
-          .reply(200, { data: { limit: testCase.limit, usage: testCase.usage } });
+          .reply(200, {
+            data: { limit: testCase.limit, usage: testCase.usage },
+          });
 
         const response = await request(app)
           .get('/api/v1/me/credits')

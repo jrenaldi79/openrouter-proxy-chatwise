@@ -43,8 +43,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(503, cloudflareHtml, {
           'content-type': 'text/html; charset=UTF-8',
-          'server': 'cloudflare',
-          'cf-ray': '123456789abcdef0-ORD'
+          server: 'cloudflare',
+          'cf-ray': '123456789abcdef0-ORD',
         });
 
       // Action: Call endpoint that gets blocked by Cloudflare
@@ -85,7 +85,7 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(503, cloudflareResponse, {
           'content-type': 'text/html',
-          'server': 'cloudflare'
+          server: 'cloudflare',
         });
 
       const response = await request(app)
@@ -118,7 +118,7 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
         {
           name: 'Bot protection',
           html: '<!DOCTYPE html><html><body><!-- Cloudflare bot protection --><div>Please enable JavaScript</div></body></html>',
-        }
+        },
       ];
 
       for (const variation of cloudflareVariations) {
@@ -126,7 +126,7 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
           .get('/api/v1/auth/key')
           .matchHeader('authorization', validApiKey)
           .reply(503, variation.html, {
-            'content-type': 'text/html; charset=UTF-8'
+            'content-type': 'text/html; charset=UTF-8',
           });
 
         const response = await request(app)
@@ -159,7 +159,7 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
         .get('/api/v1/auth/key')
         .matchHeader('authorization', validApiKey)
         .reply(503, legitimateHtml, {
-          'content-type': 'text/html; charset=UTF-8'
+          'content-type': 'text/html; charset=UTF-8',
         });
 
       const response = await request(app)
@@ -175,13 +175,14 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
 
     it('should handle mixed content-type responses correctly', async () => {
       // Test case where OpenRouter returns unexpected content-type
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare protection active</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare protection active</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
         .matchHeader('authorization', validApiKey)
         .reply(200, cloudflareHtml, {
-          'content-type': 'application/json' // Wrong content-type for HTML
+          'content-type': 'application/json', // Wrong content-type for HTML
         });
 
       const response = await request(app)
@@ -200,7 +201,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
     const validApiKey = 'Bearer sk-or-v1-test-key-123';
 
     it('should provide realistic mock response for /v1/auth/key fallback', async () => {
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
@@ -219,14 +221,15 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
         api_key: validApiKey.replace('Bearer ', ''),
         monthly_limit: 100000,
         usage: 0,
-        is_valid: true
+        is_valid: true,
       });
 
       expect(openRouterMock.isDone()).toBe(true);
     });
 
     it('should provide realistic mock response for /v1/models fallback', async () => {
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare security check</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare security check</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/models')
@@ -254,7 +257,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
 
     it('should preserve API key in mock auth response', async () => {
       const customApiKey = 'Bearer sk-or-v1-custom-key-456';
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
@@ -267,13 +271,16 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
         .expect(200);
 
       // Should preserve the actual API key in mock response
-      expect(response.body.data.api_key).toBe(customApiKey.replace('Bearer ', ''));
+      expect(response.body.data.api_key).toBe(
+        customApiKey.replace('Bearer ', '')
+      );
 
       expect(openRouterMock.isDone()).toBe(true);
     });
 
     it('should handle missing authorization header in fallback', async () => {
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
@@ -296,7 +303,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
     const validApiKey = 'Bearer sk-or-v1-test-key-123';
 
     it('should handle Cloudflare detection quickly', async () => {
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare protection</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare protection</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
@@ -320,7 +328,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
     });
 
     it('should handle concurrent Cloudflare blocks efficiently', async () => {
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare</body></html>';
 
       // Setup multiple mocks for concurrent requests
       for (let i = 0; i < 5; i++) {
@@ -357,16 +366,20 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
         .matchHeader('authorization', validApiKey)
-        .reply(200, {
-          data: {
-            api_key: validApiKey.replace('Bearer ', ''),
-            name: 'Real API Key',
-            is_valid: true,
-            usage: 42
+        .reply(
+          200,
+          {
+            data: {
+              api_key: validApiKey.replace('Bearer ', ''),
+              name: 'Real API Key',
+              is_valid: true,
+              usage: 42,
+            },
+          },
+          {
+            'content-type': 'application/json',
           }
-        }, {
-          'content-type': 'application/json'
-        });
+        );
 
       const response = await request(app)
         .get('/v1/auth/key')
@@ -425,7 +438,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
     });
 
     it('should log Cloudflare detection events appropriately', async () => {
-      const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare protection active</body></html>';
+      const cloudflareHtml =
+        '<!DOCTYPE html><html><body>Cloudflare protection active</body></html>';
 
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/auth/key')
@@ -456,7 +470,8 @@ describe('Cloudflare Blocking Detection and Fallback Integration Tests', () => {
       process.env.NODE_ENV = 'production';
 
       try {
-        const cloudflareHtml = '<!DOCTYPE html><html><body>Cloudflare</body></html>';
+        const cloudflareHtml =
+          '<!DOCTYPE html><html><body>Cloudflare</body></html>';
 
         const openRouterMock = nock('https://openrouter.ai')
           .get('/api/v1/auth/key')

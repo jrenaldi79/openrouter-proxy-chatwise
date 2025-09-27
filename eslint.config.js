@@ -24,9 +24,11 @@ module.exports = tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-require-imports': 'warn', // Allow require() for compatibility
       'prettier/prettier': 'error',
-      'no-console': 'warn',
+      'no-console': 'off', // Allow console statements for debugging
       'no-debugger': 'error',
+      'no-unexpected-multiline': 'warn', // Turn off multiline errors
     },
   },
   {

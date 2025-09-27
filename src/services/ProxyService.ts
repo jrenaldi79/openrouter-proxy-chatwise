@@ -77,7 +77,12 @@ export class ProxyService {
     }
 
     const config = {
-      method: request.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch',
+      method: request.method.toLowerCase() as
+        | 'get'
+        | 'post'
+        | 'put'
+        | 'delete'
+        | 'patch',
       url: request.url,
       headers: request.headers,
       timeout: request.timeout,
@@ -95,7 +100,10 @@ export class ProxyService {
     const fetchOptions: RequestInit = {
       method: request.method,
       headers: request.headers,
-      body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : undefined,
+      body:
+        request.body && request.method !== 'GET'
+          ? JSON.stringify(request.body)
+          : undefined,
     };
 
     const response = await fetch(request.url, fetchOptions);
@@ -188,7 +196,7 @@ export class ProxyService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   public async checkConnectivity(): Promise<boolean> {

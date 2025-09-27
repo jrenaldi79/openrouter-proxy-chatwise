@@ -29,9 +29,9 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .reply(200, {
           data: {
             api_key: validApiKey.replace('Bearer ', ''),
-            name: "Test Key",
-            is_valid: true
-          }
+            name: 'Test Key',
+            is_valid: true,
+          },
         });
 
       // Action: Call the original /v1/auth/key endpoint
@@ -52,7 +52,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .get('/api/v1/auth/key') // Should stay as /api/v1/auth/key
         .matchHeader('authorization', validApiKey)
         .reply(200, {
-          data: { api_key: 'test-key', is_valid: true }
+          data: { api_key: 'test-key', is_valid: true },
         });
 
       // Action: Call endpoint that already has /api/v1 prefix
@@ -90,8 +90,8 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .reply(200, {
           data: [
             { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-            { id: 'gpt-4', name: 'GPT-4' }
-          ]
+            { id: 'gpt-4', name: 'GPT-4' },
+          ],
         });
 
       const response = await request(app)
@@ -111,7 +111,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           id: 'chatcmpl-123',
-          choices: [{ message: { content: 'Hello!' } }]
+          choices: [{ message: { content: 'Hello!' } }],
         });
 
       const response = await request(app)
@@ -119,7 +119,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .set('Authorization', validApiKey)
         .send({
           model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: 'Hello' }]
+          messages: [{ role: 'user', content: 'Hello' }],
         })
         .expect(200);
 
@@ -188,7 +188,11 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
     });
 
     it('should handle all credit endpoints with same transformation logic', async () => {
-      const endpoints = ['/v1/credits', '/api/v1/credits', '/api/v1/me/credits'];
+      const endpoints = [
+        '/v1/credits',
+        '/api/v1/credits',
+        '/api/v1/me/credits',
+      ];
       const expectedResponse = { limit: 150, usage: 37.5 };
 
       // Setup mocks for all endpoints
@@ -285,7 +289,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .set('Authorization', validApiKey)
         .send({
           model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: 'Hello' }]
+          messages: [{ role: 'user', content: 'Hello' }],
         })
         .expect(200);
 
@@ -296,9 +300,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
     });
 
     it('should apply helmet middleware for non-API endpoints', async () => {
-      const response = await request(app)
-        .get('/health')
-        .expect(200);
+      const response = await request(app).get('/health').expect(200);
 
       // Non-API endpoints should have helmet security headers
       expect(response.headers['x-content-type-options']).toBe('nosniff');
@@ -341,7 +343,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
         .get('/api/v1/auth/key')
         .matchHeader('authorization', validApiKey)
         .reply(500, {
-          error: { code: 'INTERNAL_ERROR', message: 'Server error' }
+          error: { code: 'INTERNAL_ERROR', message: 'Server error' },
         });
 
       const response = await request(app)
@@ -379,7 +381,7 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
       const requestBody = {
         model: 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: 'Hello' }],
-        temperature: 0.7
+        temperature: 0.7,
       };
 
       const openRouterMock = nock('https://openrouter.ai')
@@ -401,8 +403,8 @@ describe('Endpoint Routing and Path Transformation Integration Tests', () => {
     it('should handle complex query parameters correctly', async () => {
       const complexQuery = {
         'filter[type]': 'gpt',
-        'sort': 'name',
-        'include[]': ['pricing', 'limits']
+        sort: 'name',
+        'include[]': ['pricing', 'limits'],
       };
 
       const openRouterMock = nock('https://openrouter.ai')

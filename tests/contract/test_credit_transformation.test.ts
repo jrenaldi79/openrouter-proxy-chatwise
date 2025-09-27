@@ -29,7 +29,7 @@ describe('Credit Transformation Contract Tests', () => {
         data: {
           limit: 100.5,
           usage: 25.75,
-        }
+        },
       };
 
       const openRouterMock = nock('https://openrouter.ai')
@@ -76,7 +76,7 @@ describe('Credit Transformation Contract Tests', () => {
         data: {
           limit: null,
           usage: 125.3,
-        }
+        },
       };
 
       const openRouterMock = nock('https://openrouter.ai')
@@ -101,7 +101,7 @@ describe('Credit Transformation Contract Tests', () => {
         data: {
           limit: 50.0,
           usage: 0,
-        }
+        },
       };
 
       const openRouterMock = nock('https://openrouter.ai')

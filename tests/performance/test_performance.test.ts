@@ -71,7 +71,7 @@ describe('Performance Integration Tests', () => {
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           id: 'chat-large',
-          choices: [{ message: { content: 'Response' } }]
+          choices: [{ message: { content: 'Response' } }],
         });
 
       const startTime = Date.now();
@@ -103,7 +103,7 @@ describe('Performance Integration Tests', () => {
           .matchHeader('authorization', validApiKey)
           .reply(200, {
             id: `chat-${i}`,
-            choices: [{ message: { content: `Response ${i}` } }]
+            choices: [{ message: { content: `Response ${i}` } }],
           });
       }
 

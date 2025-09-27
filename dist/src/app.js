@@ -123,7 +123,9 @@ function createApp() {
                     .set(errorResponse.headers)
                     .json(errorResponse.body);
             }
-            const validatedData = CreditResponse_1.CreditResponse.validateKeyResponseData(proxyResponse.data);
+            const openRouterResponse = proxyResponse.data;
+            const keyData = openRouterResponse.data;
+            const validatedData = CreditResponse_1.CreditResponse.validateKeyResponseData(keyData);
             const creditResponse = CreditResponse_1.CreditResponse.fromKeyResponse(validatedData, correlationId, proxyResponse.headers);
             const response = creditResponse
                 .withCacheHeaders('MISS')

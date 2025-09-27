@@ -182,10 +182,11 @@ export function createApp(): Express {
           .json(errorResponse.body);
       }
 
-      // Transform the response
-      const validatedData = CreditResponse.validateKeyResponseData(
-        proxyResponse.data
-      );
+      // Transform the response - extract data from nested OpenRouter response
+      const openRouterResponse = proxyResponse.data as { data?: unknown };
+      const keyData = openRouterResponse.data;
+
+      const validatedData = CreditResponse.validateKeyResponseData(keyData);
       const creditResponse = CreditResponse.fromKeyResponse(
         validatedData,
         correlationId,

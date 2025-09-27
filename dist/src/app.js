@@ -30,6 +30,7 @@ const startTime = Date.now();
 const proxyService = new ProxyService_1.ProxyService(OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
 function createApp() {
     const app = (0, express_1.default)();
+    app.set('trust proxy', true);
     app.use((0, helmet_1.default)());
     app.use((0, cors_1.default)());
     const limiter = (0, express_rate_limit_1.default)({
@@ -144,6 +145,42 @@ function createApp() {
         if (req.path === '/me/credits' && req.method === 'GET') {
             return next();
         }
+        const correlationId = req.correlationId;
+        try {
+            const fullPath = `/api/v1${req.path}`;
+            const openRouterRequest = OpenRouterRequest_1.OpenRouterRequest.fromProxyRequest({
+                method: req.method,
+                path: fullPath,
+                headers: req.headers,
+                body: req.body,
+                query: req.query,
+            }, OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
+            const requestWithCorrelation = openRouterRequest.withCorrelationId(correlationId);
+            const proxyResponse = await proxyService.makeRequest(requestWithCorrelation);
+            const responseHeaders = { ...proxyResponse.headers };
+            delete responseHeaders['transfer-encoding'];
+            res.status(proxyResponse.status).set(responseHeaders);
+            if (proxyResponse.data !== undefined) {
+                res.json(proxyResponse.data);
+            }
+            else {
+                res.end();
+            }
+        }
+        catch (error) {
+            const errorResponse = {
+                error: {
+                    code: 'UPSTREAM_ERROR',
+                    message: error instanceof Error
+                        ? error.message
+                        : 'OpenRouter API unavailable',
+                    correlationId,
+                },
+            };
+            res.status(502).json(errorResponse);
+        }
+    });
+    app.use('/v1', async (req, res, _next) => {
         const correlationId = req.correlationId;
         try {
             const fullPath = `/api/v1${req.path}`;

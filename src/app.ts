@@ -30,6 +30,9 @@ const proxyService = new ProxyService(OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
 export function createApp(): Express {
   const app = express();
 
+  // Trust proxy for Cloud Run (required for rate limiting)
+  app.set('trust proxy', true);
+
   // Security middleware
   app.use(helmet());
   app.use(cors());
@@ -221,6 +224,60 @@ export function createApp(): Express {
 
     try {
       // Create OpenRouter request - need to reconstruct full path
+      const fullPath = `/api/v1${req.path}`;
+      const openRouterRequest = OpenRouterRequest.fromProxyRequest(
+        {
+          method: req.method,
+          path: fullPath,
+          headers: req.headers as Record<string, string>,
+          body: req.body,
+          query: req.query as Record<string, string>,
+        },
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS
+      );
+
+      // Add correlation ID
+      const requestWithCorrelation =
+        openRouterRequest.withCorrelationId(correlationId);
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(
+        requestWithCorrelation
+      );
+
+      // Forward response exactly as received
+      const responseHeaders = { ...proxyResponse.headers };
+      delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
+
+      res.status(proxyResponse.status).set(responseHeaders);
+
+      if (proxyResponse.data !== undefined) {
+        res.json(proxyResponse.data);
+      } else {
+        res.end();
+      }
+    } catch (error) {
+      const errorResponse = {
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'OpenRouter API unavailable',
+          correlationId,
+        },
+      };
+      res.status(502).json(errorResponse);
+    }
+  });
+
+  // Proxy passthrough for /v1/* endpoints (for chat applications that use the shorter path)
+  app.use('/v1', async (req, res, _next) => {
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Create OpenRouter request - need to reconstruct full path with /api prefix
       const fullPath = `/api/v1${req.path}`;
       const openRouterRequest = OpenRouterRequest.fromProxyRequest(
         {

@@ -57,11 +57,19 @@ export function createApp(): Express {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.raw({ type: 'application/octet-stream', limit: '1mb' }));
 
-  // Correlation ID middleware
+  // Correlation ID and debug logging middleware
   app.use((req, res, next) => {
     const correlationId = uuidv4();
     req.correlationId = correlationId;
     res.setHeader('X-Correlation-Id', correlationId);
+
+    // Debug logging for troubleshooting
+    console.log(`[${correlationId}] ${req.method} ${req.path}`);
+    console.log(`[${correlationId}] Headers:`, JSON.stringify(req.headers, null, 2));
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(`[${correlationId}] Body:`, JSON.stringify(req.body, null, 2));
+    }
+
     next();
   });
 

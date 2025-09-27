@@ -53,6 +53,11 @@ function createApp() {
         const correlationId = (0, uuid_1.v4)();
         req.correlationId = correlationId;
         res.setHeader('X-Correlation-Id', correlationId);
+        console.log(`[${correlationId}] ${req.method} ${req.path}`);
+        console.log(`[${correlationId}] Headers:`, JSON.stringify(req.headers, null, 2));
+        if (req.body && Object.keys(req.body).length > 0) {
+            console.log(`[${correlationId}] Body:`, JSON.stringify(req.body, null, 2));
+        }
         next();
     });
     app.get('/health', async (_req, res) => {

@@ -1,6 +1,6 @@
 # OpenRouter API Proxy Server
 
-✅ **CI/CD Pipeline Configured** - Automated testing and deployment ready!
+✅ **CI/CD Pipeline Configured** - Automated testing and deployment ready! (with GCP permissions fixed)
 
 A TypeScript/Node.js proxy server that sits between client applications and the OpenRouter API, intercepting credit requests and transforming them while maintaining complete transparency for all other API calls.
 

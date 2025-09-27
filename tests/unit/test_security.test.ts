@@ -78,15 +78,10 @@ describe('Security Validation Unit Tests', () => {
 
     it('should include security headers in all responses', async () => {
       // Test non-API endpoint which should have security headers
-      const response = await request(app)
-        .get('/health')
-        .expect(200);
+      const response = await request(app).get('/health').expect(200);
 
       // Verification: Security headers from helmet middleware
-      const securityHeaders = [
-        'x-content-type-options',
-        'x-frame-options',
-      ];
+      const securityHeaders = ['x-content-type-options', 'x-frame-options'];
 
       securityHeaders.forEach(header => {
         expect(response.headers).toHaveProperty(header);
@@ -120,7 +115,9 @@ describe('Security Validation Unit Tests', () => {
           .set('Access-Control-Request-Headers', 'authorization');
 
         expect(preflightResponse.status).toBe(204);
-        expect(preflightResponse.headers['access-control-allow-origin']).toBe('*');
+        expect(preflightResponse.headers['access-control-allow-origin']).toBe(
+          '*'
+        );
         expect(
           preflightResponse.headers['access-control-allow-methods']
         ).toMatch(/GET/);
@@ -316,7 +313,9 @@ describe('Security Validation Unit Tests', () => {
       ];
 
       // Setup mocks for valid requests (only those with validApiKey should reach OpenRouter)
-      const validRequests = Math.ceil(concurrentRequests / securityScenarios.length);
+      const validRequests = Math.ceil(
+        concurrentRequests / securityScenarios.length
+      );
       const openRouterMock = nock('https://openrouter.ai');
       for (let i = 0; i < validRequests; i++) {
         openRouterMock

@@ -59,8 +59,12 @@ describe('ChatWise Integration Pattern Tests', () => {
       expect(authResponse.body.data.is_valid).toBe(true);
 
       // Both should have compatible headers for ChatWise validation
-      expect(creditsResponse.headers['content-type']).toMatch(/^application\/json/);
-      expect(authResponse.headers['content-type']).toMatch(/^application\/json/);
+      expect(creditsResponse.headers['content-type']).toMatch(
+        /^application\/json/
+      );
+      expect(authResponse.headers['content-type']).toMatch(
+        /^application\/json/
+      );
 
       expect(creditsKeyMock.isDone()).toBe(true);
       expect(authKeyMock.isDone()).toBe(true);
@@ -448,8 +452,8 @@ describe('ChatWise Integration Pattern Tests', () => {
         .reply(408, {
           error: {
             code: 'REQUEST_TIMEOUT',
-            message: 'Request timeout'
-          }
+            message: 'Request timeout',
+          },
         });
 
       const response = await request(app)

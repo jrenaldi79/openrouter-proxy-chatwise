@@ -174,9 +174,21 @@ describe('Error Propagation Unit Tests', () => {
 
     it('should include correlation IDs in all error responses', async () => {
       const errorEndpoints = [
-        { clientPath: '/api/v1/models', openRouterPath: '/api/v1/models', method: 'get' },
-        { clientPath: '/api/v1/me/credits', openRouterPath: '/api/v1/key', method: 'get' },
-        { clientPath: '/api/v1/chat/completions', openRouterPath: '/api/v1/chat/completions', method: 'post' },
+        {
+          clientPath: '/api/v1/models',
+          openRouterPath: '/api/v1/models',
+          method: 'get',
+        },
+        {
+          clientPath: '/api/v1/me/credits',
+          openRouterPath: '/api/v1/key',
+          method: 'get',
+        },
+        {
+          clientPath: '/api/v1/chat/completions',
+          openRouterPath: '/api/v1/chat/completions',
+          method: 'post',
+        },
       ];
 
       for (const endpoint of errorEndpoints) {
@@ -305,7 +317,9 @@ describe('Error Propagation Unit Tests', () => {
         },
         {
           name: 'Invalid data types',
-          response: { data: { limit: 'not-a-number', usage: 'also-not-a-number' } },
+          response: {
+            data: { limit: 'not-a-number', usage: 'also-not-a-number' },
+          },
           expectedCode: 'INTERNAL_ERROR',
           expectedMessage: /invalid.*data.*type/i,
         },

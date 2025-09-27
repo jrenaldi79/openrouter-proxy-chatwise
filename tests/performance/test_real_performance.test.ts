@@ -90,9 +90,7 @@ describe('Real API Performance Tests', () => {
 
         // Execute concurrent requests
         const promises = Array.from({ length: concurrentRequests }, () =>
-          request(app)
-            .get('/v1/credits')
-            .set('Authorization', validApiKey)
+          request(app).get('/v1/credits').set('Authorization', validApiKey)
         );
 
         const responses = await Promise.all(promises);
@@ -107,7 +105,9 @@ describe('Real API Performance Tests', () => {
         // Should handle concurrent requests efficiently
         expect(totalTime).toBeLessThan(8000); // Under 8 seconds for 3 concurrent requests
 
-        console.log(`${concurrentRequests} concurrent requests completed in: ${totalTime}ms`);
+        console.log(
+          `${concurrentRequests} concurrent requests completed in: ${totalTime}ms`
+        );
         console.log(`Average per request: ${totalTime / concurrentRequests}ms`);
       },
       15000
@@ -133,7 +133,9 @@ describe('Real API Performance Tests', () => {
         // Should complete dual request pattern quickly
         expect(totalTime).toBeLessThan(6000); // Under 6 seconds for dual request
 
-        console.log(`ChatWise dual endpoint pattern completed in: ${totalTime}ms`);
+        console.log(
+          `ChatWise dual endpoint pattern completed in: ${totalTime}ms`
+        );
       },
       12000
     );
@@ -146,7 +148,9 @@ describe('Real API Performance Tests', () => {
         const requestCount = 5; // Small sequential load
         const results: number[] = [];
 
-        console.log(`Testing sequential throughput with ${requestCount} requests...`);
+        console.log(
+          `Testing sequential throughput with ${requestCount} requests...`
+        );
 
         for (let i = 0; i < requestCount; i++) {
           const startTime = Date.now();

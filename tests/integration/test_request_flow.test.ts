@@ -31,8 +31,8 @@ describe('Request Flow Integration Tests', () => {
             label: 'Test API Key',
             limit: 500,
             usage: 150,
-            is_free_tier: false
-          }
+            is_free_tier: false,
+          },
         });
 
       const response = await request(app)
@@ -63,8 +63,8 @@ describe('Request Flow Integration Tests', () => {
         .reply(401, {
           error: {
             code: 'invalid_api_key',
-            message: 'Invalid API key provided'
-          }
+            message: 'Invalid API key provided',
+          },
         });
 
       const response = await request(app)
@@ -91,14 +91,14 @@ describe('Request Flow Integration Tests', () => {
             {
               id: 'openai/gpt-3.5-turbo',
               name: 'GPT-3.5 Turbo',
-              pricing: { prompt: '0.0000015', completion: '0.000002' }
+              pricing: { prompt: '0.0000015', completion: '0.000002' },
             },
             {
               id: 'anthropic/claude-3-haiku',
               name: 'Claude 3 Haiku',
-              pricing: { prompt: '0.00000025', completion: '0.00000125' }
-            }
-          ]
+              pricing: { prompt: '0.00000025', completion: '0.00000125' },
+            },
+          ],
         });
 
       const response = await request(app)
@@ -129,19 +129,21 @@ describe('Request Flow Integration Tests', () => {
           object: 'chat.completion',
           created: 1677652288,
           model: 'gpt-3.5-turbo',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Hello! How can I help you today?'
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: 'Hello! How can I help you today?',
+              },
+              finish_reason: 'stop',
             },
-            finish_reason: 'stop'
-          }],
+          ],
           usage: {
             prompt_tokens: 10,
             completion_tokens: 15,
-            total_tokens: 25
-          }
+            total_tokens: 25,
+          },
         });
 
       const response = await request(app)
@@ -150,10 +152,8 @@ describe('Request Flow Integration Tests', () => {
         .set('Content-Type', 'application/json')
         .send({
           model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'user', content: 'Hello!' }
-          ],
-          max_tokens: 50
+          messages: [{ role: 'user', content: 'Hello!' }],
+          max_tokens: 50,
         })
         .expect(200);
 
@@ -161,7 +161,9 @@ describe('Request Flow Integration Tests', () => {
       expect(response.body).toHaveProperty('id');
       expect(response.body).toHaveProperty('choices');
       expect(response.body.choices[0]).toHaveProperty('message');
-      expect(response.body.choices[0].message.content).toBe('Hello! How can I help you today?');
+      expect(response.body.choices[0].message.content).toBe(
+        'Hello! How can I help you today?'
+      );
 
       // Our middleware integration
       expect(response.headers['x-correlation-id']).toBeDefined();
@@ -182,9 +184,9 @@ describe('Request Flow Integration Tests', () => {
             usage: 200,
             rate_limit: {
               requests_per_minute: 60,
-              tokens_per_minute: 40000
-            }
-          }
+              tokens_per_minute: 40000,
+            },
+          },
         });
 
       const response = await request(app)
@@ -203,9 +205,7 @@ describe('Request Flow Integration Tests', () => {
     });
 
     it('should integrate authentication failure with error handling', async () => {
-      const response = await request(app)
-        .get('/v1/credits')
-        .expect(401);
+      const response = await request(app).get('/v1/credits').expect(401);
 
       // Verify authentication failure integrates with error middleware
       expect(response.body).toHaveProperty('error');
@@ -226,7 +226,7 @@ describe('Request Flow Integration Tests', () => {
         .get('/api/v1/models')
         .matchHeader('authorization', validApiKey)
         // These headers should NOT be present due to filtering
-        .reply(function() {
+        .reply(function () {
           // Verify problematic headers were filtered out
           expect(this.req.headers['x-forwarded-for']).toBeUndefined();
           expect(this.req.headers['connection']).not.toBe('keep-alive'); // Original malicious value filtered
@@ -259,8 +259,8 @@ describe('Request Flow Integration Tests', () => {
         .reply(503, {
           error: {
             code: 'service_unavailable',
-            message: 'OpenRouter API is temporarily unavailable'
-          }
+            message: 'OpenRouter API is temporarily unavailable',
+          },
         });
 
       const response = await request(app)

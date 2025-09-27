@@ -80,19 +80,26 @@ export function createApp(): Express {
   app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
 
   // Handle body parser errors (like payload too large)
-  app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (error.type === 'entity.too.large') {
-      res.status(413).json({
-        error: {
-          code: 'PAYLOAD_TOO_LARGE',
-          message: 'Request payload too large',
-          correlationId: req.correlationId || 'unknown',
-        },
-      });
-      return;
+  app.use(
+    (
+      error: any,
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction
+    ) => {
+      if (error.type === 'entity.too.large') {
+        res.status(413).json({
+          error: {
+            code: 'PAYLOAD_TOO_LARGE',
+            message: 'Request payload too large',
+            correlationId: req.correlationId || 'unknown',
+          },
+        });
+        return;
+      }
+      next(error);
     }
-    next(error);
-  });
+  );
 
   // Correlation ID and debug logging middleware
   app.use((req, res, next) => {
@@ -320,7 +327,7 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         let errorCode = 'UPSTREAM_ERROR';
-        let statusCode = proxyResponse.status; // Preserve original status code
+        const statusCode = proxyResponse.status; // Preserve original status code
 
         if (proxyResponse.status === 401) {
           errorCode = 'UNAUTHORIZED';
@@ -450,7 +457,12 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         // For authentication errors (401), pass through original OpenRouter error structure
-        if (proxyResponse.status === 401 && proxyResponse.data && typeof proxyResponse.data === 'object' && 'error' in proxyResponse.data) {
+        if (
+          proxyResponse.status === 401 &&
+          proxyResponse.data &&
+          typeof proxyResponse.data === 'object' &&
+          'error' in proxyResponse.data
+        ) {
           res.set('x-correlation-id', correlationId);
           res.status(401).json(proxyResponse.data);
           return;
@@ -483,7 +495,8 @@ export function createApp(): Express {
               typeof proxyResponse.data === 'object' &&
               proxyResponse.data &&
               'error' in proxyResponse.data
-                ? (proxyResponse.data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+                ? (proxyResponse.data as { error: { message?: string } }).error
+                    .message || 'OpenRouter API error'
                 : 'OpenRouter API error',
             correlationId,
           },
@@ -555,7 +568,7 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         let errorCode = 'UPSTREAM_ERROR';
-        let statusCode = proxyResponse.status; // Preserve original status code
+        const statusCode = proxyResponse.status; // Preserve original status code
 
         if (proxyResponse.status === 401) {
           errorCode = 'UNAUTHORIZED';
@@ -751,7 +764,12 @@ export function createApp(): Express {
       // Handle error responses
       if (proxyResponse.status >= 400) {
         // For authentication errors (401), pass through original OpenRouter error structure
-        if (proxyResponse.status === 401 && proxyResponse.data && typeof proxyResponse.data === 'object' && 'error' in proxyResponse.data) {
+        if (
+          proxyResponse.status === 401 &&
+          proxyResponse.data &&
+          typeof proxyResponse.data === 'object' &&
+          'error' in proxyResponse.data
+        ) {
           res.writeHead(401, {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
@@ -788,7 +806,8 @@ export function createApp(): Express {
               typeof proxyResponse.data === 'object' &&
               proxyResponse.data &&
               'error' in proxyResponse.data
-                ? (proxyResponse.data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+                ? (proxyResponse.data as { error: { message?: string } }).error
+                    .message || 'OpenRouter API error'
                 : 'OpenRouter API error',
             correlationId,
           },
@@ -1154,7 +1173,8 @@ export function createApp(): Express {
               typeof proxyResponse.data === 'object' &&
               proxyResponse.data &&
               'error' in proxyResponse.data
-                ? (proxyResponse.data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+                ? (proxyResponse.data as { error: { message?: string } }).error
+                    .message || 'OpenRouter API error'
                 : 'OpenRouter API error',
             correlationId,
           },
@@ -1230,9 +1250,8 @@ if (require.main === module) {
   const app = createApp();
 
   app.listen(PORT, () => {
-    // eslint-disable-next-line no-console
     console.log(`OpenRouter Proxy Server listening on port ${PORT}`);
-    // eslint-disable-next-line no-console
+
     console.log(`Proxying to: ${OPENROUTER_BASE_URL}`);
   });
 }

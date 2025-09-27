@@ -67,7 +67,9 @@ describe('Real API Integration Tests', () => {
           expect(response.body.data).toHaveProperty('usage');
 
           // Should have proper headers
-          expect(response.headers['content-type']).toMatch(/^application\/json/);
+          expect(response.headers['content-type']).toMatch(
+            /^application\/json/
+          );
           expect(response.headers['x-correlation-id']).toBeDefined();
         }
       },
@@ -103,7 +105,9 @@ describe('Real API Integration Tests', () => {
           expect(firstModel).toHaveProperty('name');
 
           // Should have proper headers
-          expect(response.headers['content-type']).toMatch(/^application\/json/);
+          expect(response.headers['content-type']).toMatch(
+            /^application\/json/
+          );
           expect(response.headers['x-correlation-id']).toBeDefined();
         }
       },
@@ -161,7 +165,9 @@ describe('Real API Integration Tests', () => {
           expect(response.body.choices.length).toBeGreaterThan(0);
 
           // Should have proper headers
-          expect(response.headers['content-type']).toMatch(/^application\/json/);
+          expect(response.headers['content-type']).toMatch(
+            /^application\/json/
+          );
           expect(response.headers['x-correlation-id']).toBeDefined();
         }
       },
@@ -177,10 +183,10 @@ describe('Real API Integration Tests', () => {
           .send({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'user', content: 'Say "test" and nothing else.' }
+              { role: 'user', content: 'Say "test" and nothing else.' },
             ],
             max_tokens: 5,
-            stream: true
+            stream: true,
           });
 
         console.log('Streaming chat response status:', response.status);
@@ -196,8 +202,8 @@ describe('Real API Integration Tests', () => {
           const contentType = response.headers['content-type'] || '';
           expect(
             contentType.includes('text/plain') ||
-            contentType.includes('text/event-stream') ||
-            contentType.includes('application/json')
+              contentType.includes('text/event-stream') ||
+              contentType.includes('application/json')
           ).toBe(true);
           expect(response.headers['x-correlation-id']).toBeDefined();
         } else {

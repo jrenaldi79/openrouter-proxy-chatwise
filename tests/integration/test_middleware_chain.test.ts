@@ -87,8 +87,8 @@ describe('Middleware Chain Integration Tests', () => {
         .reply(200, {
           data: [
             { id: 'model-1', name: 'Test Model 1' },
-            { id: 'model-2', name: 'Test Model 2' }
-          ]
+            { id: 'model-2', name: 'Test Model 2' },
+          ],
         });
 
       const response = await request(app)
@@ -116,8 +116,8 @@ describe('Middleware Chain Integration Tests', () => {
         .reply(429, {
           error: {
             code: 'rate_limit_exceeded',
-            message: 'Rate limit exceeded'
-          }
+            message: 'Rate limit exceeded',
+          },
         });
 
       const response = await request(app)
@@ -140,9 +140,13 @@ describe('Middleware Chain Integration Tests', () => {
 
       nock('https://openrouter.ai')
         .get('/api/v1/key')
-        .reply(200, { data: { limit: 200, usage: 50 } }, {
-          'Content-Type': 'application/json; charset=utf-8'
-        });
+        .reply(
+          200,
+          { data: { limit: 200, usage: 50 } },
+          {
+            'Content-Type': 'application/json; charset=utf-8',
+          }
+        );
 
       const response = await request(app)
         .get('/v1/credits')
@@ -163,7 +167,7 @@ describe('Middleware Chain Integration Tests', () => {
         .reply(200, {
           id: 'chatcmpl-test',
           object: 'chat.completion',
-          choices: [{ message: { role: 'assistant', content: 'Hello!' } }]
+          choices: [{ message: { role: 'assistant', content: 'Hello!' } }],
         });
 
       const response = await request(app)
@@ -172,7 +176,7 @@ describe('Middleware Chain Integration Tests', () => {
         .send({
           model: 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: 'Hello' }],
-          stream: false
+          stream: false,
         })
         .expect(200);
 
@@ -185,9 +189,7 @@ describe('Middleware Chain Integration Tests', () => {
 
   describe('Health Check Integration', () => {
     it('should integrate health check with monitoring middleware', async () => {
-      const response = await request(app)
-        .get('/health')
-        .expect(200);
+      const response = await request(app).get('/health').expect(200);
 
       // Verify health endpoint integrates with our middleware
       expect(response.body).toHaveProperty('status');

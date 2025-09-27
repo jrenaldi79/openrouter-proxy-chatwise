@@ -222,9 +222,7 @@ export class CreditResponse {
 
     // Validate limit field (can be null for unlimited accounts)
     if (keyData.limit !== null && typeof keyData.limit !== 'number') {
-      throw new Error(
-        'Invalid data type: limit must be a number or null'
-      );
+      throw new Error('Invalid data type: limit must be a number or null');
     }
 
     if (typeof keyData.limit === 'number' && keyData.limit < 0) {

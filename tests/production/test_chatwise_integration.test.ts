@@ -43,8 +43,12 @@ describe('ChatWise Integration Pattern - Real API Tests', () => {
         expect(authResponse.body.data).toHaveProperty('usage');
 
         // Both should have proper headers for ChatWise validation
-        expect(creditsResponse.headers['content-type']).toMatch(/^application\/json/);
-        expect(authResponse.headers['content-type']).toMatch(/^application\/json/);
+        expect(creditsResponse.headers['content-type']).toMatch(
+          /^application\/json/
+        );
+        expect(authResponse.headers['content-type']).toMatch(
+          /^application\/json/
+        );
         expect(creditsResponse.headers['x-correlation-id']).toBeDefined();
         expect(authResponse.headers['x-correlation-id']).toBeDefined();
       },
@@ -83,10 +87,13 @@ describe('ChatWise Integration Pattern - Real API Tests', () => {
           .send({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'user', content: 'Say "Hello ChatWise" and nothing else.' },
+              {
+                role: 'user',
+                content: 'Say "Hello ChatWise" and nothing else.',
+              },
             ],
             max_tokens: 10,
-            stream: false
+            stream: false,
           });
 
         // May get 200 with completion or error status due to API limits
@@ -163,7 +170,7 @@ describe('ChatWise Integration Pattern - Real API Tests', () => {
         const responses = await Promise.all([
           request(app).get('/v1/credits').set('Authorization', validApiKey),
           request(app).get('/v1/credits').set('Authorization', validApiKey),
-          request(app).get('/v1/credits').set('Authorization', validApiKey)
+          request(app).get('/v1/credits').set('Authorization', validApiKey),
         ]);
 
         const totalTime = Date.now() - startTime;

@@ -22,9 +22,7 @@ describe('Security Validation - Real API Tests', () => {
     testIf(hasRealApiKey)(
       'should reject requests without authorization header',
       async () => {
-        const response = await request(app)
-          .get('/v1/credits')
-          .expect(401);
+        const response = await request(app).get('/v1/credits').expect(401);
 
         expect(response.body).toHaveProperty('error');
         expect(response.body.error).toHaveProperty('code');
@@ -71,9 +69,9 @@ describe('Security Validation - Real API Tests', () => {
           messages: [
             {
               role: 'user',
-              content: 'x'.repeat(50000) // 50KB content
-            }
-          ]
+              content: 'x'.repeat(50000), // 50KB content
+            },
+          ],
         };
 
         const response = await request(app)
@@ -100,10 +98,11 @@ describe('Security Validation - Real API Tests', () => {
           messages: [
             {
               role: 'user',
-              content: 'Test with special chars: <script>alert("xss")</script> & 中文 🚀'
-            }
+              content:
+                'Test with special chars: <script>alert("xss")</script> & 中文 🚀',
+            },
           ],
-          max_tokens: 10
+          max_tokens: 10,
         };
 
         const response = await request(app)
@@ -127,9 +126,7 @@ describe('Security Validation - Real API Tests', () => {
       async () => {
         // Make multiple rapid requests to potentially trigger rate limiting
         const promises = Array.from({ length: 5 }, () =>
-          request(app)
-            .get('/v1/credits')
-            .set('Authorization', validApiKey)
+          request(app).get('/v1/credits').set('Authorization', validApiKey)
         );
 
         const responses = await Promise.all(promises);
@@ -162,7 +159,9 @@ describe('Security Validation - Real API Tests', () => {
             .set('Authorization', validApiKey);
 
           expect(response.headers['x-correlation-id']).toBeDefined();
-          expect(response.headers['x-correlation-id']).toMatch(/^[a-f0-9-]{36}$/);
+          expect(response.headers['x-correlation-id']).toMatch(
+            /^[a-f0-9-]{36}$/
+          );
         }
       },
       15000
@@ -192,9 +191,7 @@ describe('Security Validation - Real API Tests', () => {
 
   describe('Health and Monitoring', () => {
     test('should provide health check endpoint without authentication', async () => {
-      const response = await request(app)
-        .get('/health')
-        .expect(200);
+      const response = await request(app).get('/health').expect(200);
 
       expect(response.body).toHaveProperty('status');
       expect(response.body.status).toBe('healthy');

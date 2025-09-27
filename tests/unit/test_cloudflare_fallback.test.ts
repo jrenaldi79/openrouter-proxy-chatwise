@@ -293,7 +293,9 @@ describe('Cloudflare Blocking Detection and Fallback Unit Tests', () => {
 
       // Should provide upstream error response when cloudflare blocks
       expect(response.body.error.code).toBe('UPSTREAM_ERROR');
-      expect(response.body.error.message).toMatch(/Authorization header required|upstream error/i);
+      expect(response.body.error.message).toMatch(
+        /Authorization header required|upstream error/i
+      );
 
       // Mock is not called because request fails due to missing authorization before reaching OpenRouter
       expect(openRouterMock.isDone()).toBe(false);

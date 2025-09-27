@@ -1,4 +1,5 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
+import https from 'https';
 import { OpenRouterRequest } from '../models/OpenRouterRequest';
 
 export interface ProxyResponse {
@@ -9,7 +10,7 @@ export interface ProxyResponse {
 
 export class ProxyService {
   private readonly baseUrl: string;
-  // private readonly httpsAgent: https.Agent;
+  private readonly httpsAgent: https.Agent;
 
   constructor(
     baseUrl: string = 'https://openrouter.ai',
@@ -18,13 +19,13 @@ export class ProxyService {
     this.baseUrl = baseUrl;
 
     // Create HTTPS agent optimized for Cloud Run environment
-    // this.httpsAgent = new https.Agent({
-    //   keepAlive: true,
-    //   timeout: 60000,
-    //   // In production environments like Cloud Run, certificate verification
-    //   // can sometimes fail due to corporate firewalls or proxy configurations
-    //   rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
-    // });
+    this.httpsAgent = new https.Agent({
+      keepAlive: true,
+      timeout: 60000,
+      // In production environments like Cloud Run, certificate verification
+      // can sometimes fail due to corporate firewalls or proxy configurations
+      rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+    });
   }
 
   public async makeRequest(request: OpenRouterRequest): Promise<ProxyResponse> {
@@ -88,7 +89,7 @@ export class ProxyService {
       timeout: request.timeout,
       data: request.body,
       validateStatus: () => true, // Don't throw on HTTP error status codes
-      // httpsAgent: this.httpsAgent, // Use our configured HTTPS agent
+      httpsAgent: this.httpsAgent, // Use our configured HTTPS agent
     };
 
     return await axios(config);

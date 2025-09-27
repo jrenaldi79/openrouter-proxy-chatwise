@@ -62,9 +62,9 @@ describe('Real API Integration Tests', () => {
         } else {
           expect(response.status).toBe(200);
           // Real API response should have the expected structure
-          expect(response.body.data).toHaveProperty('api_key');
-          expect(response.body.data).toHaveProperty('is_valid');
-          expect(response.body.data.is_valid).toBe(true);
+          expect(response.body.data).toHaveProperty('label');
+          expect(response.body.data).toHaveProperty('limit');
+          expect(response.body.data).toHaveProperty('usage');
 
           // Should have proper headers
           expect(response.headers['content-type']).toBe('application/json');

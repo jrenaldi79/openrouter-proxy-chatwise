@@ -1,5 +1,4 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
-import https from 'https';
 import { OpenRouterRequest } from '../models/OpenRouterRequest';
 
 export interface ProxyResponse {
@@ -10,7 +9,7 @@ export interface ProxyResponse {
 
 export class ProxyService {
   private readonly baseUrl: string;
-  private readonly httpsAgent: https.Agent;
+  // private readonly httpsAgent: https.Agent;
 
   constructor(
     baseUrl: string = 'https://openrouter.ai',
@@ -19,13 +18,13 @@ export class ProxyService {
     this.baseUrl = baseUrl;
 
     // Create HTTPS agent optimized for Cloud Run environment
-    this.httpsAgent = new https.Agent({
-      keepAlive: true,
-      timeout: 60000,
-      // In production environments like Cloud Run, certificate verification
-      // can sometimes fail due to corporate firewalls or proxy configurations
-      rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
-    });
+    // this.httpsAgent = new https.Agent({
+    //   keepAlive: true,
+    //   timeout: 60000,
+    //   // In production environments like Cloud Run, certificate verification
+    //   // can sometimes fail due to corporate firewalls or proxy configurations
+    //   rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
+    // });
   }
 
   public async makeRequest(request: OpenRouterRequest): Promise<ProxyResponse> {
@@ -84,7 +83,7 @@ export class ProxyService {
       timeout: request.timeout,
       data: request.body,
       validateStatus: () => true, // Don't throw on HTTP error status codes
-      httpsAgent: this.httpsAgent, // Use our configured HTTPS agent
+      // httpsAgent: this.httpsAgent, // Use our configured HTTPS agent
     };
 
     return await axios(config);
@@ -95,8 +94,8 @@ export class ProxyService {
   ): Promise<AxiosResponse> {
     const fetchOptions: RequestInit = {
       method: request.method,
-      headers: request.headers as Record<string, string>,
-      body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : null,
+      headers: request.headers,
+      body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : undefined,
     };
 
     const response = await fetch(request.url, fetchOptions);

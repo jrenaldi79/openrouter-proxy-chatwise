@@ -95,12 +95,16 @@ tests/
 ├── integration/     # End-to-end flow tests
 └── unit/           # Service unit tests
 
-specs/
-├── contracts/       # OpenAPI specifications
+docs/
+├── ci-cd/           # CI/CD pipeline documentation
+├── testing/         # Testing guides and strategies
+├── deployment/      # Deployment instructions
+├── troubleshooting/ # Issue resolution guides
 ├── data-model.md    # Entity definitions
 ├── plan.md         # Implementation plan
 ├── tasks.md        # Development tasks
-└── quickstart.md   # Testing scenarios
+├── quickstart.md   # Testing scenarios
+└── README.md       # Documentation index
 ```
 
 ### Development Workflow
@@ -242,6 +246,16 @@ All other endpoints are transparently forwarded to OpenRouter API.
 5. Implement following TDD workflow (Red-Green-Refactor)
 6. Verify all constitutional requirements met
 
+## 📚 Documentation
+
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
+
+- **[Documentation Index](docs/README.md)** - Complete documentation overview
+- **[Quick Start Testing](docs/quickstart.md)** - Testing scenarios and validation
+- **[Testing Guide](docs/testing/TESTING.md)** - Comprehensive testing strategy
+- **[CI/CD Pipeline](docs/ci-cd/CI-CD-FLOW.md)** - Automated deployment workflow
+- **[Project Specification](docs/openrouter-proxy-spec.md)** - Detailed technical specifications
+
 ## License
 
 This project follows the OpenRouter Proxy Constitution v1.0.0 for development practices and code quality standards.
@@ -249,7 +263,8 @@ This project follows the OpenRouter Proxy Constitution v1.0.0 for development pr
 ## Support
 
 For issues and questions:
-- Check troubleshooting guide in `specs/quickstart.md`
-- Review health check endpoint for system status
-- Monitor structured logs for detailed error information
+- Check [troubleshooting guide](docs/quickstart.md) for common issues
+- Review [testing documentation](docs/testing/TESTING.md) for development workflow
+- Monitor health check endpoint for system status
+- Check structured logs for detailed error information
 - Verify OpenRouter API connectivity and rate limits

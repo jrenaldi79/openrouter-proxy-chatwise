@@ -1,0 +1,184 @@
+openapi: 3.0.3
+info:
+  title: OpenRouter Proxy - Credit Transformation
+  version: 1.0.0
+  description: Credit endpoint transformation from /api/v1/key to expected format
+
+paths:
+  /api/v1/me/credits:
+    get:
+      summary: Get user credits (transformed)
+      description: Intercepts credit request and transforms /api/v1/key response to expected format
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^Bearer sk-or-v1-.*'
+          example: "Bearer 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"
+      responses:
+        '200':
+          description: Credit information in expected format
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - total_credits
+                      - total_usage
+                    properties:
+                      total_credits:
+                        type: number
+                        minimum: 0
+                        description: Total credit limit (999999 for unlimited accounts)
+                        example: 100.50
+                      total_usage:
+                        type: number
+                        minimum: 0
+                        description: Current usage amount
+                        example: 25.75
+              examples:
+                limited_account:
+                  summary: Account with credit limit
+                  value:
+                    data:
+                      total_credits: 100.50
+                      total_usage: 25.75
+                unlimited_account:
+                  summary: Unlimited account
+                  value:
+                    data:
+                      total_credits: 999999
+                      total_usage: 125.30
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                      - message
+                      - correlationId
+                    properties:
+                      code:
+                        type: string
+                        example: "UNAUTHORIZED"
+                      message:
+                        type: string
+                        example: "Invalid API key"
+                      correlationId:
+                        type: string
+                        example: "req-123456"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                      - message
+                      - correlationId
+                    properties:
+                      code:
+                        type: string
+                        example: "RATE_LIMIT_EXCEEDED"
+                      message:
+                        type: string
+                        example: "Too many requests"
+                      correlationId:
+                        type: string
+                        example: "req-123456"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                      - message
+                      - correlationId
+                    properties:
+                      code:
+                        type: string
+                        example: "INTERNAL_ERROR"
+                      message:
+                        type: string
+                        example: "Unable to fetch credit information"
+                      correlationId:
+                        type: string
+                        example: "req-123456"
+        '502':
+          description: OpenRouter API unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                      - message
+                      - correlationId
+                    properties:
+                      code:
+                        type: string
+                        example: "UPSTREAM_ERROR"
+                      message:
+                        type: string
+                        example: "OpenRouter API unavailable"
+                      correlationId:
+                        type: string
+                        example: "req-123456"
+
+components:
+  schemas:
+    OpenRouterKeyResponse:
+      type: object
+      description: Internal - Original response from /api/v1/key endpoint
+      properties:
+        limit:
+          type: number
+          nullable: true
+          description: Credit limit (null for unlimited)
+        usage:
+          type: number
+          minimum: 0
+          description: Current usage amount
+      required:
+        - usage
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "sk-or-v1-{api_key}"
+
+security:
+  - bearerAuth: []

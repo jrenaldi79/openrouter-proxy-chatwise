@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info:
+  title: OpenRouter Proxy - Health Check
+  version: 1.0.0
+  description: Health check endpoint for system monitoring
+
+paths:
+  /health:
+    get:
+      summary: System health check
+      description: Returns system health status including OpenRouter connectivity
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - openrouterConnectivity
+                  - uptime
+                  - version
+                  - timestamp
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, unhealthy, degraded]
+                    example: healthy
+                  openrouterConnectivity:
+                    type: string
+                    enum: [connected, disconnected, timeout]
+                    example: connected
+                  cacheStatus:
+                    type: string
+                    enum: [operational, degraded, disabled]
+                    example: operational
+                  uptime:
+                    type: number
+                    minimum: 0
+                    example: 3600
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-09-26T10:30:00Z"
+        '503':
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - timestamp
+                properties:
+                  status:
+                    type: string
+                    enum: [unhealthy]
+                  openrouterConnectivity:
+                    type: string
+                    enum: [disconnected, timeout, error]
+                  timestamp:
+                    type: string
+                    format: date-time

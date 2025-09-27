@@ -1,0 +1,92 @@
+openapi: 3.0.3
+info:
+  title: OpenRouter Proxy - Passthrough Behavior
+  version: 1.0.0
+  description: Transparent proxy behavior for all non-credit endpoints
+
+paths:
+  /api/v1/models:
+    get:
+      summary: Passthrough example - List models
+      description: Forwards request to OpenRouter API without modification
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^Bearer sk-or-v1-.*'
+          example: "Bearer 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"
+      responses:
+        '200':
+          description: Models list from OpenRouter (exact passthrough)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Exact response from OpenRouter API
+        '401':
+          description: Authentication error (passed through)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Exact error response from OpenRouter API
+        '500':
+          description: Server error (passed through)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Exact error response from OpenRouter API
+
+  /api/v1/chat/completions:
+    post:
+      summary: Passthrough example - Chat completions
+      description: Forwards request to OpenRouter API without modification
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^Bearer sk-or-v1-.*'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Exact request body forwarded to OpenRouter
+      responses:
+        '200':
+          description: Chat completion response (exact passthrough)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Exact response from OpenRouter API
+        '400':
+          description: Bad request (passed through)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Exact error response from OpenRouter API
+        '401':
+          description: Authentication error (passed through)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Exact error response from OpenRouter API
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "sk-or-v1-{api_key}"
+
+security:
+  - bearerAuth: []

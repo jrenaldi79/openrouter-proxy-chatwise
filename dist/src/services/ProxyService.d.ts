@@ -9,6 +9,7 @@ export declare class ProxyService {
     constructor(baseUrl?: string, _defaultTimeout?: number);
     makeRequest(request: OpenRouterRequest): Promise<ProxyResponse>;
     private executeRequest;
+    private executeFetchRequest;
     private formatResponse;
     private shouldRetry;
     private formatError;

@@ -5,16 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProxyService = void 0;
 const axios_1 = __importDefault(require("axios"));
-const https_1 = __importDefault(require("https"));
 const OpenRouterRequest_1 = require("../models/OpenRouterRequest");
 class ProxyService {
     constructor(baseUrl = 'https://openrouter.ai', _defaultTimeout = 30000) {
         this.baseUrl = baseUrl;
-        this.httpsAgent = new https_1.default.Agent({
-            keepAlive: true,
-            timeout: 60000,
-            rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
-        });
     }
     async makeRequest(request) {
         let lastError = null;
@@ -55,7 +49,6 @@ class ProxyService {
             timeout: request.timeout,
             data: request.body,
             validateStatus: () => true,
-            httpsAgent: this.httpsAgent,
         };
         return await (0, axios_1.default)(config);
     }
@@ -63,7 +56,7 @@ class ProxyService {
         const fetchOptions = {
             method: request.method,
             headers: request.headers,
-            body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : null,
+            body: request.body && request.method !== 'GET' ? JSON.stringify(request.body) : undefined,
         };
         const response = await fetch(request.url, fetchOptions);
         let data;

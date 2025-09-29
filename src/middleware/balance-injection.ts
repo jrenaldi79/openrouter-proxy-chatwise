@@ -279,7 +279,10 @@ export async function balanceInjectionMiddleware(
             } catch (error) {
               Logger.balanceEvent(
                 'Invalid JSON - skipping injection',
-                correlationId
+                correlationId,
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                }
               );
             }
           }

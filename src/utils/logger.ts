@@ -9,7 +9,7 @@ const LOG_FORMAT =
 const BALANCE_INJECTION_DEBUG = process.env.BALANCE_INJECTION_DEBUG === 'true';
 
 // Create format based on LOG_FORMAT environment variable
-const createLogFormat = () => {
+const createLogFormat = (): winston.Logform.Format => {
   const baseFormat = winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true })

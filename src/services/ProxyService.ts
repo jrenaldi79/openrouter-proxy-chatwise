@@ -98,7 +98,7 @@ export class ProxyService {
       headers: request.headers,
       timeout: request.timeout,
       data: request.body,
-      validateStatus: () => true, // Don't throw on HTTP error status codes
+      validateStatus: (): boolean => true, // Don't throw on HTTP error status codes
       httpsAgent: this.httpsAgent, // Use our configured HTTPS agent
     };
 

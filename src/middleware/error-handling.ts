@@ -27,7 +27,7 @@ export function errorHandler(
   error: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   const correlationId = req.correlationId || uuidv4();
 

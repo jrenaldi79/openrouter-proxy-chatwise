@@ -4,6 +4,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { proxyService } from '../config/services';
+import { Logger } from '../utils/logger';
 import {
   validateAuth,
   createOpenRouterRequest,
@@ -96,6 +97,9 @@ export async function apiV1ProxyHandler(
       res.end();
     }
   } catch (error) {
+    Logger.error('Proxy API error', correlationId, {
+      error: error instanceof Error ? error.message : String(error),
+    });
     const errorResponse = createErrorResponse(
       502,
       'OpenRouter API unavailable',

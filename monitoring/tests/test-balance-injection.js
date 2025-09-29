@@ -9,7 +9,19 @@
 const http = require('http');
 
 const SERVICE_URL = 'http://localhost:3000';
-const TEST_API_KEY = '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';
+const TEST_API_KEY = process.env.OPENROUTER_TEST_API_KEY;
+
+// Validate API key
+if (!TEST_API_KEY) {
+  console.error('❌ Error: OPENROUTER_TEST_API_KEY environment variable is required');
+  console.error('   Example: export OPENROUTER_TEST_API_KEY="sk-or-v1-your-key-here"');
+  process.exit(1);
+}
+
+if (!TEST_API_KEY.startsWith('sk-or-v1-')) {
+  console.error('❌ Error: Invalid API key format. Must start with sk-or-v1-');
+  process.exit(1);
+}
 
 function makeStreamingChatRequest(messages, shouldTriggerBalance = true) {
   return new Promise((resolve, reject) => {

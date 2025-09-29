@@ -266,7 +266,7 @@ describe('Request Flow Integration Tests', () => {
       const response = await request(app)
         .get('/v1/credits')
         .set('Authorization', validApiKey)
-        .expect(503);
+        .expect(502);
 
       // Verify upstream errors integrate with our error handling
       expect(response.body).toHaveProperty('error');

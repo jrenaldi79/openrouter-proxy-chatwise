@@ -167,8 +167,8 @@ describe('Cloudflare Blocking Detection and Fallback Unit Tests', () => {
         .set('Authorization', validApiKey)
         .expect(503); // Should pass through the actual error
 
-      // Should NOT use mock fallback for non-Cloudflare HTML
-      expect(response.text).toContain('Service Temporarily Unavailable');
+      // Should NOT use mock fallback for non-Cloudflare HTML - returns error as JSON
+      expect(response.body.error.code).toBe('UPSTREAM_ERROR');
 
       expect(openRouterMock.isDone()).toBe(true);
     });

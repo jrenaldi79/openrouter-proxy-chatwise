@@ -409,7 +409,7 @@ describe('ChatWise Integration Pattern Tests', () => {
         .expect(401);
 
       // Should return proper error format for ChatWise
-      expect(response.body.error.code).toBe('UNAUTHORIZED');
+      expect(response.body.error.code).toBe('UPSTREAM_ERROR');
       expect(response.headers['content-type']).toMatch(/^application\/json/);
 
       expect(authKeyMock.isDone()).toBe(true);

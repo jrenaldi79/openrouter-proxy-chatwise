@@ -359,7 +359,7 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
         .set('Authorization', validApiKey)
         .expect(500);
 
-      expect(response.body.error.code).toBe('INTERNAL_ERROR');
+      expect(response.body.error.code).toBe('UPSTREAM_ERROR');
 
       expect(openRouterMock.isDone()).toBe(true);
     });

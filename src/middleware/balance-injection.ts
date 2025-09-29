@@ -3,6 +3,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
+import https from 'https';
 import { AuthToken } from '../models/AuthToken';
 import { OpenRouterRequest } from '../models/OpenRouterRequest';
 import { ChatCompletionRequest } from '../services/BalanceInjectionService';
@@ -21,7 +23,10 @@ export async function balanceInjectionMiddleware(
   const correlationId = req.correlationId as string;
 
   // Track all requests to this middleware
-  Logger.balanceMiddleware(`${req.method} ${req.path} - body:${!!req.body}`, correlationId);
+  Logger.balanceMiddleware(
+    `${req.method} ${req.path} - body:${!!req.body}`,
+    correlationId
+  );
 
   // Log headers to identify client patterns
   const userAgent = req.headers['user-agent'] || '';
@@ -31,14 +36,20 @@ export async function balanceInjectionMiddleware(
 
   // Only process POST requests with valid bodies
   if (req.method !== 'POST' || !req.body) {
-    Logger.balanceDebug(`SKIPPING: Not POST or no body - method:${req.method} body:${!!req.body}`, correlationId);
+    Logger.balanceDebug(
+      `SKIPPING: Not POST or no body - method:${req.method} body:${!!req.body}`,
+      correlationId
+    );
     return next();
   }
 
   try {
     // Parse the chat completion request
     const chatRequest = req.body as ChatCompletionRequest;
-    Logger.balanceDebug(`PARSED REQUEST: messages:${chatRequest?.messages?.length || 0}`, correlationId);
+    Logger.balanceDebug(
+      `PARSED REQUEST: messages:${chatRequest?.messages?.length || 0}`,
+      correlationId
+    );
 
     // Check if this request is from ChatWise client
     const isChatWise = balanceInjectionService.isChatWiseClient(req.headers);
@@ -51,7 +62,11 @@ export async function balanceInjectionMiddleware(
 
     // Check if this is a new session (single user message)
     const isNewSession = balanceInjectionService.isNewSession(chatRequest);
-    Logger.balanceSession(isNewSession, chatRequest?.messages?.length || 0, correlationId);
+    Logger.balanceSession(
+      isNewSession,
+      chatRequest?.messages?.length || 0,
+      correlationId
+    );
 
     if (!isNewSession) {
       Logger.balanceDebug('SKIPPING: Not a new session', correlationId);
@@ -63,18 +78,27 @@ export async function balanceInjectionMiddleware(
     Logger.balanceAuth(!!authToken, authToken?.isValid || false, correlationId);
 
     if (!authToken || !authToken.isValid) {
-      Logger.balanceDebug('AUTH FAILED: Passing to main handler', correlationId);
+      Logger.balanceDebug(
+        'AUTH FAILED: Passing to main handler',
+        correlationId
+      );
       return next(); // Let the main handler deal with auth errors
     }
 
     // Only inject balance for streaming requests (for now)
     Logger.balanceStream(!!chatRequest.stream, correlationId);
     if (!chatRequest.stream) {
-      Logger.balanceDebug('NON-STREAMING: Skipping balance injection', correlationId);
+      Logger.balanceDebug(
+        'NON-STREAMING: Skipping balance injection',
+        correlationId
+      );
       return next(); // Skip non-streaming requests for this prototype
     }
 
-    Logger.balanceInfo('Starting balance injection for new session', correlationId);
+    Logger.balanceInfo(
+      'Starting balance injection for new session',
+      correlationId
+    );
 
     // Get user's balance
     Logger.balanceDebug('Fetching user balance...', correlationId);
@@ -83,26 +107,36 @@ export async function balanceInjectionMiddleware(
       correlationId
     );
 
-    Logger.balanceDebug(`Balance fetch result: ${balance ? 'SUCCESS' : 'FAILED'}`, correlationId);
+    Logger.balanceDebug(
+      `Balance fetch result: ${balance ? 'SUCCESS' : 'FAILED'}`,
+      correlationId
+    );
 
     if (!balance) {
-      Logger.balanceError('Balance fetch failed, continuing to main handler', correlationId);
+      Logger.balanceError(
+        'Balance fetch failed, continuing to main handler',
+        correlationId
+      );
       return next(); // Continue without balance if we can't fetch it
     }
 
     // Create balance text to prepend to first LLM response
-    const balanceText = balance.totalCredits === -1
-      ? `💰 Account: Unlimited credits (${balance.usedCredits} used)\n\n`
-      : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)\n\n`;
+    const balanceText =
+      balance.totalCredits === -1
+        ? `💰 Account: Unlimited credits (${balance.usedCredits} used)\n\n`
+        : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)\n\n`;
 
-    Logger.balanceInfo('Setting up streaming with balance injection', correlationId);
+    Logger.balanceInfo(
+      'Setting up streaming with balance injection',
+      correlationId
+    );
 
     try {
       // Set up proper SSE streaming response
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'Access-Control-Allow-Origin': '*',
         'X-Correlation-Id': correlationId,
       });
@@ -119,7 +153,10 @@ export async function balanceInjectionMiddleware(
         ? `/api${req.originalUrl}`
         : req.originalUrl;
 
-      Logger.balanceDebug(`Path mapping: ${req.originalUrl} -> ${openRouterPath}`, correlationId);
+      Logger.balanceDebug(
+        `Path mapping: ${req.originalUrl} -> ${openRouterPath}`,
+        correlationId
+      );
 
       const openRouterRequest = OpenRouterRequest.fromProxyRequest(
         {
@@ -135,8 +172,6 @@ export async function balanceInjectionMiddleware(
       Logger.balanceDebug('OpenRouter request created', correlationId);
 
       // Make streaming request to OpenRouter
-      const axios = require('axios');
-      const https = require('https');
 
       const axiosConfig = {
         method: openRouterRequest.method,
@@ -157,13 +192,21 @@ export async function balanceInjectionMiddleware(
       Logger.balanceDebug('Axios response received', correlationId);
 
       if (response.status !== 200) {
-        Logger.balanceError('OpenRouter returned non-200 status', correlationId, undefined, { status: response.status });
+        Logger.balanceError(
+          'OpenRouter returned non-200 status',
+          correlationId,
+          undefined,
+          { status: response.status }
+        );
         res.write('data: [DONE]\n\n');
         res.end();
         return;
       }
 
-      Logger.balanceInfo('Setting up streaming with balance injection', correlationId);
+      Logger.balanceInfo(
+        'Setting up streaming with balance injection',
+        correlationId
+      );
 
       let isFirstContentChunk = true;
       let chunkBuffer = '';
@@ -171,7 +214,9 @@ export async function balanceInjectionMiddleware(
       // Parse and relay OpenRouter's SSE stream with balance injection
       response.data.on('data', (chunk: Buffer) => {
         const chunkStr = chunk.toString();
-        Logger.balanceEvent('Received chunk', correlationId, { chunkPreview: chunkStr.substring(0, 100) });
+        Logger.balanceEvent('Received chunk', correlationId, {
+          chunkPreview: chunkStr.substring(0, 100),
+        });
         chunkBuffer += chunkStr;
 
         // Process complete SSE events (lines ending with \n\n)
@@ -182,7 +227,10 @@ export async function balanceInjectionMiddleware(
         for (const event of events) {
           if (!event.trim()) continue;
 
-          Logger.balanceEvent(`Checking event: ${event.substring(0, 200)}`, correlationId);
+          Logger.balanceEvent(
+            `Checking event: ${event.substring(0, 200)}`,
+            correlationId
+          );
 
           let modifiedEvent = event;
 
@@ -199,21 +247,40 @@ export async function balanceInjectionMiddleware(
               const jsonStr = event.substring(6); // Remove "data: "
               const jsonObj = JSON.parse(jsonStr);
 
-              if (jsonObj.choices && jsonObj.choices[0] && jsonObj.choices[0].delta && jsonObj.choices[0].delta.content && jsonObj.choices[0].delta.content.trim()) {
-                Logger.balanceInfo('Found content chunk - injecting balance', correlationId);
+              if (
+                jsonObj.choices &&
+                jsonObj.choices[0] &&
+                jsonObj.choices[0].delta &&
+                jsonObj.choices[0].delta.content &&
+                jsonObj.choices[0].delta.content.trim()
+              ) {
+                Logger.balanceInfo(
+                  'Found content chunk - injecting balance',
+                  correlationId
+                );
 
                 // Inject balance at the beginning of content
-                jsonObj.choices[0].delta.content = balanceText + jsonObj.choices[0].delta.content;
+                jsonObj.choices[0].delta.content =
+                  balanceText + jsonObj.choices[0].delta.content;
 
                 // Reconstruct the SSE event
                 modifiedEvent = `data: ${JSON.stringify(jsonObj)}`;
                 isFirstContentChunk = false;
-                Logger.balanceInfo('Balance injected into first chunk', correlationId);
+                Logger.balanceInfo(
+                  'Balance injected into first chunk',
+                  correlationId
+                );
               } else {
-                Logger.balanceEvent('Skipping event - no content or empty', correlationId);
+                Logger.balanceEvent(
+                  'Skipping event - no content or empty',
+                  correlationId
+                );
               }
             } catch (error) {
-              Logger.balanceEvent('Invalid JSON - skipping injection', correlationId);
+              Logger.balanceEvent(
+                'Invalid JSON - skipping injection',
+                correlationId
+              );
             }
           }
 
@@ -234,17 +301,25 @@ export async function balanceInjectionMiddleware(
       });
 
       Logger.balanceDebug('All handlers set up', correlationId);
-
     } catch (streamError) {
-      Logger.balanceError('Streaming setup error', correlationId, streamError instanceof Error ? streamError : new Error(String(streamError)));
+      Logger.balanceError(
+        'Streaming setup error',
+        correlationId,
+        streamError instanceof Error
+          ? streamError
+          : new Error(String(streamError))
+      );
       res.write('data: [DONE]\n\n');
       res.end();
     }
 
     return;
-
   } catch (error) {
-    Logger.balanceError('Balance injection error', correlationId, error instanceof Error ? error : new Error(String(error)));
+    Logger.balanceError(
+      'Balance injection error',
+      correlationId,
+      error instanceof Error ? error : new Error(String(error))
+    );
     // Continue with normal processing if balance injection fails
     return next();
   }

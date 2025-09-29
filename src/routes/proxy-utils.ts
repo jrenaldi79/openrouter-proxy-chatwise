@@ -21,7 +21,10 @@ export interface ProxyErrorResponse {
 /**
  * Validate authorization for proxy requests
  */
-export function validateAuth(req: Request): { authToken: AuthToken | null; errorResponse: ProxyErrorResponse | null } {
+export function validateAuth(req: Request): {
+  authToken: AuthToken | null;
+  errorResponse: ProxyErrorResponse | null;
+} {
   const correlationId = req.correlationId as string;
   const authToken = AuthToken.fromRequest(req);
 
@@ -96,7 +99,8 @@ export function handleCloudflareBlock(
     const errorResponse: ProxyErrorResponse = {
       error: {
         code: 'UPSTREAM_ERROR',
-        message: 'OpenRouter API blocked by Cloudflare - check network configuration',
+        message:
+          'OpenRouter API blocked by Cloudflare - check network configuration',
         correlationId,
       },
     };
@@ -127,7 +131,10 @@ export function handleCloudflareBlock(
 /**
  * Map OpenRouter status codes to error codes
  */
-export function mapStatusToErrorCode(status: number): { code: string; statusCode: number } {
+export function mapStatusToErrorCode(status: number): {
+  code: string;
+  statusCode: number;
+} {
   let errorCode = 'UPSTREAM_ERROR';
   let statusCode = status; // Preserve original status code by default
 
@@ -165,10 +172,9 @@ export function createErrorResponse(
     error: {
       code,
       message:
-        typeof data === 'object' &&
-        data &&
-        'error' in data
-          ? (data as { error: { message?: string } }).error.message || 'OpenRouter API error'
+        typeof data === 'object' && data && 'error' in data
+          ? (data as { error: { message?: string } }).error.message ||
+            'OpenRouter API error'
           : 'OpenRouter API error',
       correlationId,
     },

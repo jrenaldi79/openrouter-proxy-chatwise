@@ -32,7 +32,8 @@ export function loadEnvironmentConfig(): EnvironmentConfig {
     NODE_ENV: process.env.NODE_ENV || 'development',
 
     // OpenRouter API Configuration
-    OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai',
+    OPENROUTER_BASE_URL:
+      process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai',
     REQUEST_TIMEOUT_MS: process.env.REQUEST_TIMEOUT_MS
       ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
       : 30000,
@@ -49,7 +50,8 @@ export function loadEnvironmentConfig(): EnvironmentConfig {
     ENABLE_TRANSFORMATION: process.env.ENABLE_TRANSFORMATION !== 'false',
 
     // Security Configuration
-    NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+    NODE_TLS_REJECT_UNAUTHORIZED:
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
   };
 }
 

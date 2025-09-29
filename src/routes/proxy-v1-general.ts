@@ -3,6 +3,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import https from 'https';
+import url from 'url';
 import { proxyService } from '../config/services';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
@@ -12,7 +14,7 @@ import {
   handleCloudflareBlock,
   mapStatusToErrorCode,
   sendCleanResponse,
-  ProxyErrorResponse
+  ProxyErrorResponse,
 } from './proxy-utils';
 
 /**
@@ -46,16 +48,20 @@ const MOCK_MODELS_RESPONSE = {
 /**
  * Handle streaming requests with direct HTTP proxy
  */
-function handleStreamingRequest(req: Request, res: Response, correlationId: string): void {
+function handleStreamingRequest(
+  req: Request,
+  res: Response,
+  correlationId: string
+): void {
   const targetUrl = `${envConfig.OPENROUTER_BASE_URL}/api/v1${req.path}`;
   const proxyHeaders = { ...req.headers };
   proxyHeaders['host'] = new URL(envConfig.OPENROUTER_BASE_URL).host;
   delete proxyHeaders['content-length']; // Let the proxy recalculate
 
-  const https = require('https');
-  const url = require('url');
-
-  const targetOptions = url.parse(targetUrl);
+  const targetOptions = url.parse(targetUrl) as url.UrlWithStringQuery & {
+    method?: string;
+    headers?: Record<string, string | string[] | undefined>;
+  };
   targetOptions.method = req.method;
   targetOptions.headers = proxyHeaders;
 
@@ -76,7 +82,10 @@ function handleStreamingRequest(req: Request, res: Response, correlationId: stri
   );
 
   proxyReq.on('error', (error: Error) => {
-    Logger.error('Streaming proxy error', correlationId, { error: error.message, stack: error.stack });
+    Logger.error('Streaming proxy error', correlationId, {
+      error: error.message,
+      stack: error.stack,
+    });
     if (!res.headersSent) {
       res.status(502).json({
         error: {
@@ -99,7 +108,11 @@ function handleStreamingRequest(req: Request, res: Response, correlationId: stri
 /**
  * Proxy passthrough for /v1/* endpoints (for chat applications that use the shorter path)
  */
-export async function v1ProxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function v1ProxyHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   // Skip if this is the credits endpoint (already handled above)
   // Note: /v1/auth/key and /v1/models are now handled by specific routes above
   if (req.path === '/credits' && req.method === 'GET') {
@@ -120,7 +133,11 @@ export async function v1ProxyHandler(req: Request, res: Response, next: NextFunc
 
     // For non-streaming requests, use the existing ProxyService
     const fullPath = `/api/v1${req.path}`;
-    const openRouterRequest = createOpenRouterRequest(req, fullPath, correlationId);
+    const openRouterRequest = createOpenRouterRequest(
+      req,
+      fullPath,
+      correlationId
+    );
 
     // Make request to OpenRouter
     const proxyResponse = await proxyService.makeRequest(openRouterRequest);
@@ -129,7 +146,12 @@ export async function v1ProxyHandler(req: Request, res: Response, next: NextFunc
     if (isCloudflareBlocked(proxyResponse.data)) {
       // For /models endpoint, use specific mock response
       if (req.path === '/models') {
-        const handled = handleCloudflareBlock(req, res, correlationId, MOCK_MODELS_RESPONSE);
+        const handled = handleCloudflareBlock(
+          req,
+          res,
+          correlationId,
+          MOCK_MODELS_RESPONSE
+        );
         if (handled) return;
       }
 
@@ -139,13 +161,20 @@ export async function v1ProxyHandler(req: Request, res: Response, next: NextFunc
 
     // For /v1/chat/completions, use clean headers to match OpenRouter exactly
     if (req.path === '/chat/completions') {
-      sendCleanResponse(res, proxyResponse.status, proxyResponse.data, correlationId);
+      sendCleanResponse(
+        res,
+        proxyResponse.status,
+        proxyResponse.data,
+        correlationId
+      );
       return;
     }
 
     // Handle error responses
     if (proxyResponse.status >= 400) {
-      const { code: errorCode, statusCode } = mapStatusToErrorCode(proxyResponse.status);
+      const { code: errorCode, statusCode } = mapStatusToErrorCode(
+        proxyResponse.status
+      );
       const errorResponse: ProxyErrorResponse = {
         error: {
           code: errorCode,
@@ -180,9 +209,7 @@ export async function v1ProxyHandler(req: Request, res: Response, next: NextFunc
       error: {
         code: 'UPSTREAM_ERROR',
         message:
-          error instanceof Error
-            ? error.message
-            : 'OpenRouter API unavailable',
+          error instanceof Error ? error.message : 'OpenRouter API unavailable',
         correlationId,
       },
     };

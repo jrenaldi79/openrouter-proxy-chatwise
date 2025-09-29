@@ -32,7 +32,10 @@ export function errorHandler(
   const correlationId = req.correlationId || uuidv4();
 
   // Log the error for debugging
-  Logger.error('Unhandled error in middleware', correlationId, { error: error.message, stack: error.stack });
+  Logger.error('Unhandled error in middleware', correlationId, {
+    error: error.message,
+    stack: error.stack,
+  });
 
   res.status(500).json({
     error: {

@@ -74,7 +74,16 @@ export class ProxyService {
         return response;
       } catch (fetchError) {
         // Fallback to axios if fetch fails
-        Logger.warn('Fetch failed, falling back to axios', request.getCorrelationId(), { error: fetchError instanceof Error ? fetchError.message : String(fetchError) });
+        Logger.warn(
+          'Fetch failed, falling back to axios',
+          request.getCorrelationId(),
+          {
+            error:
+              fetchError instanceof Error
+                ? fetchError.message
+                : String(fetchError),
+          }
+        );
       }
     }
 

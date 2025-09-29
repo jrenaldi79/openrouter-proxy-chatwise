@@ -1,17 +1,5 @@
 import express, { Express } from 'express';
 
-// Extend Express Request interface for balance injection
-declare global {
-  namespace Express {
-    interface Request {
-      balanceInjectionActive?: {
-        chatId: string;
-        responseStarted: boolean;
-      };
-    }
-  }
-}
-
 // Configuration
 import { envConfig } from './config/environment';
 
@@ -28,7 +16,7 @@ import {
   creditsMethodValidation,
   meCreditsHandler,
   apiCreditsHandler,
-  v1CreditsHandler
+  v1CreditsHandler,
 } from './routes/credits';
 import { apiV1ProxyHandler } from './routes/proxy-api-v1';
 import { v1ModelsHandler } from './routes/proxy-v1-models';
@@ -59,7 +47,10 @@ export function createApp(): Express {
   app.get('/v1/credits', v1CreditsHandler);
 
   // Balance injection middleware for new chat sessions
-  app.use(['/api/v1/chat/completions', '/v1/chat/completions'], balanceInjectionMiddleware);
+  app.use(
+    ['/api/v1/chat/completions', '/v1/chat/completions'],
+    balanceInjectionMiddleware
+  );
 
   // Proxy passthrough for all other /api/v1/* endpoints
   app.use('/api/v1', apiV1ProxyHandler);

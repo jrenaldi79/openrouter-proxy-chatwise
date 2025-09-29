@@ -157,7 +157,7 @@ class HealthStatus {
     static createHealthy(uptime = 0, version = '1.0.0') {
         return HealthStatus.create('connected', 'operational', Date.now() - uptime * 1000, version);
     }
-    static createUnhealthy(_reason = 'OpenRouter unavailable', version = '1.0.0') {
+    static createUnhealthy(reason = 'OpenRouter unavailable', version = '1.0.0') {
         return HealthStatus.create('disconnected', undefined, Date.now(), version);
     }
     static createDegraded(openrouterStatus, cacheStatus, uptime = 0, version = '1.0.0') {

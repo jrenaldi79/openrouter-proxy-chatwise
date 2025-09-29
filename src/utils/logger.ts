@@ -2,8 +2,10 @@ import winston from 'winston';
 
 // Environment-based configuration
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const LOG_LEVEL = process.env.LOG_LEVEL || (NODE_ENV === 'production' ? 'info' : 'debug');
-const LOG_FORMAT = process.env.LOG_FORMAT || (NODE_ENV === 'production' ? 'json' : 'simple');
+const LOG_LEVEL =
+  process.env.LOG_LEVEL || (NODE_ENV === 'production' ? 'info' : 'debug');
+const LOG_FORMAT =
+  process.env.LOG_FORMAT || (NODE_ENV === 'production' ? 'json' : 'simple');
 const BALANCE_INJECTION_DEBUG = process.env.BALANCE_INJECTION_DEBUG === 'true';
 
 // Create format based on LOG_FORMAT environment variable
@@ -14,10 +16,7 @@ const createLogFormat = () => {
   );
 
   if (LOG_FORMAT === 'json') {
-    return winston.format.combine(
-      baseFormat,
-      winston.format.json()
-    );
+    return winston.format.combine(baseFormat, winston.format.json());
   } else {
     return winston.format.combine(
       baseFormat,
@@ -33,33 +32,57 @@ const logger = winston.createLogger({
   format: createLogFormat(),
   transports: [
     new winston.transports.Console({
-      silent: process.env.NODE_ENV === 'test'
-    })
-  ]
+      silent: process.env.NODE_ENV === 'test',
+    }),
+  ],
 });
 
 // Logger utility class with correlation ID support
 export class Logger {
-  static info(message: string, correlationId?: string, meta?: Record<string, unknown>): void {
+  static info(
+    message: string,
+    correlationId?: string,
+    meta?: Record<string, unknown>
+  ): void {
     logger.info(message, { correlationId, ...meta });
   }
 
-  static warn(message: string, correlationId?: string, meta?: Record<string, unknown>): void {
+  static warn(
+    message: string,
+    correlationId?: string,
+    meta?: Record<string, unknown>
+  ): void {
     logger.warn(message, { correlationId, ...meta });
   }
 
-  static error(message: string, correlationId?: string, meta?: Record<string, unknown>): void {
+  static error(
+    message: string,
+    correlationId?: string,
+    meta?: Record<string, unknown>
+  ): void {
     logger.error(message, { correlationId, ...meta });
   }
 
-  static debug(message: string, correlationId?: string, meta?: Record<string, unknown>): void {
+  static debug(
+    message: string,
+    correlationId?: string,
+    meta?: Record<string, unknown>
+  ): void {
     logger.debug(message, { correlationId, ...meta });
   }
 
   // Specialized logging for balance injection debugging
-  static balanceDebug(message: string, correlationId?: string, meta?: Record<string, unknown>): void {
+  static balanceDebug(
+    message: string,
+    correlationId?: string,
+    meta?: Record<string, unknown>
+  ): void {
     if (BALANCE_INJECTION_DEBUG) {
-      logger.debug(`[BALANCE] ${message}`, { correlationId, feature: 'balance_injection', ...meta });
+      logger.debug(`[BALANCE] ${message}`, {
+        correlationId,
+        feature: 'balance_injection',
+        ...meta,
+      });
     }
   }
 
@@ -75,7 +98,7 @@ export class Logger {
       type: 'request',
       method,
       path,
-      ...meta
+      ...meta,
     });
   }
 
@@ -95,7 +118,7 @@ export class Logger {
       path,
       statusCode,
       duration,
-      ...meta
+      ...meta,
     });
   }
 
@@ -114,7 +137,11 @@ export class Logger {
     correlationId: string,
     meta?: Record<string, unknown>
   ): void {
-    this.balanceDebug(`SESSION: isNew=${isNew} messages=${messageCount}`, correlationId, meta);
+    this.balanceDebug(
+      `SESSION: isNew=${isNew} messages=${messageCount}`,
+      correlationId,
+      meta
+    );
   }
 
   static balanceClient(
@@ -123,7 +150,11 @@ export class Logger {
     correlationId: string,
     meta?: Record<string, unknown>
   ): void {
-    this.balanceDebug(`CLIENT: isChatWise=${isChatWise} userAgent=${userAgent.substring(0, 50)}...`, correlationId, meta);
+    this.balanceDebug(
+      `CLIENT: isChatWise=${isChatWise} userAgent=${userAgent.substring(0, 50)}...`,
+      correlationId,
+      meta
+    );
   }
 
   static balanceAuth(
@@ -132,7 +163,11 @@ export class Logger {
     correlationId: string,
     meta?: Record<string, unknown>
   ): void {
-    this.balanceDebug(`AUTH: hasToken=${hasToken} isValid=${isValid}`, correlationId, meta);
+    this.balanceDebug(
+      `AUTH: hasToken=${hasToken} isValid=${isValid}`,
+      correlationId,
+      meta
+    );
   }
 
   static balanceStream(
@@ -140,7 +175,11 @@ export class Logger {
     correlationId: string,
     meta?: Record<string, unknown>
   ): void {
-    this.balanceDebug(`STREAM: isStreaming=${isStreaming}`, correlationId, meta);
+    this.balanceDebug(
+      `STREAM: isStreaming=${isStreaming}`,
+      correlationId,
+      meta
+    );
   }
 
   static balanceEvent(
@@ -152,17 +191,30 @@ export class Logger {
   }
 
   // Production-level balance injection logging (always enabled)
-  static balanceInfo(message: string, correlationId: string, meta?: Record<string, unknown>): void {
-    logger.info(`[BALANCE] ${message}`, { correlationId, feature: 'balance_injection', ...meta });
+  static balanceInfo(
+    message: string,
+    correlationId: string,
+    meta?: Record<string, unknown>
+  ): void {
+    logger.info(`[BALANCE] ${message}`, {
+      correlationId,
+      feature: 'balance_injection',
+      ...meta,
+    });
   }
 
-  static balanceError(message: string, correlationId: string, error?: Error, meta?: Record<string, unknown>): void {
+  static balanceError(
+    message: string,
+    correlationId: string,
+    error?: Error,
+    meta?: Record<string, unknown>
+  ): void {
     logger.error(`[BALANCE] ${message}`, {
       correlationId,
       feature: 'balance_injection',
       error: error?.message,
       stack: error?.stack,
-      ...meta
+      ...meta,
     });
   }
 }

@@ -9,7 +9,7 @@ import {
   isCloudflareBlocked,
   handleCloudflareBlock,
   sendCleanResponse,
-  ProxyErrorResponse
+  ProxyErrorResponse,
 } from './proxy-utils';
 
 /**
@@ -29,13 +29,20 @@ const MOCK_AUTH_RESPONSE = {
 /**
  * Special handling for /v1/auth/key endpoint
  */
-export async function v1AuthKeyHandler(req: Request, res: Response): Promise<void> {
+export async function v1AuthKeyHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
   const correlationId = req.correlationId as string;
 
   try {
     // Create OpenRouter request - need to reconstruct full path with /api prefix
     const fullPath = req.path.replace('/v1', '/api/v1');
-    const openRouterRequest = createOpenRouterRequest(req, fullPath, correlationId);
+    const openRouterRequest = createOpenRouterRequest(
+      req,
+      fullPath,
+      correlationId
+    );
 
     // Make request to OpenRouter
     const proxyResponse = await proxyService.makeRequest(openRouterRequest);
@@ -47,11 +54,17 @@ export async function v1AuthKeyHandler(req: Request, res: Response): Promise<voi
         ...MOCK_AUTH_RESPONSE,
         data: {
           ...MOCK_AUTH_RESPONSE.data,
-          api_key: req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
+          api_key:
+            req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
         },
       };
 
-      const handled = handleCloudflareBlock(req, res, correlationId, mockResponse);
+      const handled = handleCloudflareBlock(
+        req,
+        res,
+        correlationId,
+        mockResponse
+      );
       if (handled) return;
     }
 
@@ -71,20 +84,28 @@ export async function v1AuthKeyHandler(req: Request, res: Response): Promise<voi
         },
       };
 
-      sendCleanResponse(res, proxyResponse.status, errorResponse, correlationId);
+      sendCleanResponse(
+        res,
+        proxyResponse.status,
+        errorResponse,
+        correlationId
+      );
       return;
     }
 
     // Send clean response with headers matching OpenRouter exactly
-    sendCleanResponse(res, proxyResponse.status, proxyResponse.data, correlationId);
+    sendCleanResponse(
+      res,
+      proxyResponse.status,
+      proxyResponse.data,
+      correlationId
+    );
   } catch (error) {
     const errorResponse: ProxyErrorResponse = {
       error: {
         code: 'UPSTREAM_ERROR',
         message:
-          error instanceof Error
-            ? error.message
-            : 'OpenRouter API unavailable',
+          error instanceof Error ? error.message : 'OpenRouter API unavailable',
         correlationId,
       },
     };

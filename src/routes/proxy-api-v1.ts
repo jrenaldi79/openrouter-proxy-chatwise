@@ -9,13 +9,17 @@ import {
   createOpenRouterRequest,
   mapStatusToErrorCode,
   createErrorResponse,
-  ProxyErrorResponse
+  ProxyErrorResponse,
 } from './proxy-utils';
 
 /**
  * Proxy passthrough for /api/v1/* endpoints
  */
-export async function apiV1ProxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function apiV1ProxyHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   // Skip if this is the credits endpoint (already handled above)
   if (
     (req.path === '/me/credits' || req.path === '/credits') &&
@@ -36,7 +40,11 @@ export async function apiV1ProxyHandler(req: Request, res: Response, next: NextF
 
     // Create OpenRouter request - need to reconstruct full path
     const fullPath = `/api/v1${req.path}`;
-    const openRouterRequest = createOpenRouterRequest(req, fullPath, correlationId);
+    const openRouterRequest = createOpenRouterRequest(
+      req,
+      fullPath,
+      correlationId
+    );
 
     // Make request to OpenRouter
     const proxyResponse = await proxyService.makeRequest(openRouterRequest);
@@ -55,7 +63,9 @@ export async function apiV1ProxyHandler(req: Request, res: Response, next: NextF
         return;
       }
 
-      const { code: errorCode, statusCode } = mapStatusToErrorCode(proxyResponse.status);
+      const { code: errorCode, statusCode } = mapStatusToErrorCode(
+        proxyResponse.status
+      );
       const errorResponse: ProxyErrorResponse = {
         error: {
           code: errorCode,
@@ -86,7 +96,11 @@ export async function apiV1ProxyHandler(req: Request, res: Response, next: NextF
       res.end();
     }
   } catch (error) {
-    const errorResponse = createErrorResponse(502, 'OpenRouter API unavailable', correlationId);
+    const errorResponse = createErrorResponse(
+      502,
+      'OpenRouter API unavailable',
+      correlationId
+    );
     res.status(502).json(errorResponse);
   }
 }

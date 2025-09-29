@@ -6,6 +6,7 @@ export interface ProxyResponse {
 }
 export declare class ProxyService {
     private readonly baseUrl;
+    private readonly httpsAgent;
     constructor(baseUrl?: string, _defaultTimeout?: number);
     makeRequest(request: OpenRouterRequest): Promise<ProxyResponse>;
     private executeRequest;

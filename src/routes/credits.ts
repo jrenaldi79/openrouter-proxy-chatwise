@@ -12,7 +12,11 @@ import { envConfig } from '../config/environment';
 /**
  * Method validation for credits endpoint - only allow GET
  */
-export function creditsMethodValidation(req: Request, res: Response, next: NextFunction): void {
+export function creditsMethodValidation(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   if (req.method !== 'GET') {
     const correlationId = req.correlationId as string;
     const errorResponse = CreditResponse.createErrorResponse(
@@ -42,9 +46,7 @@ async function handleCreditRequest(req: Request, res: Response): Promise<void> {
     if (!authToken || !authToken.isValid) {
       const errorResponse = CreditResponse.createErrorResponse(
         'UNAUTHORIZED',
-        authToken
-          ? 'Invalid API key format'
-          : 'Authorization header required',
+        authToken ? 'Invalid API key format' : 'Authorization header required',
         401,
         correlationId
       );

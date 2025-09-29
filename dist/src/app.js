@@ -15,6 +15,7 @@ const ProxyService_1 = require("./services/ProxyService");
 const CreditResponse_1 = require("./models/CreditResponse");
 const AuthToken_1 = require("./models/AuthToken");
 const OpenRouterRequest_1 = require("./models/OpenRouterRequest");
+const BalanceInjectionService_1 = require("./services/BalanceInjectionService");
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai';
 const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
@@ -28,6 +29,7 @@ const RATE_LIMIT_MAX_REQUESTS = process.env.RATE_LIMIT_MAX_REQUESTS
     : 100;
 const startTime = Date.now();
 const proxyService = new ProxyService_1.ProxyService(OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
+const balanceInjectionService = new BalanceInjectionService_1.BalanceInjectionService(proxyService, OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
 function createApp() {
     const app = (0, express_1.default)();
     app.disable('x-powered-by');
@@ -35,28 +37,48 @@ function createApp() {
         app.set('trust proxy', true);
     }
     app.use((req, res, next) => {
-        if (req.path === '/v1/credits' || req.path === '/api/v1/credits' || req.path === '/api/v1/me/credits' || req.path === '/v1/models' || req.path === '/v1/auth/key' || req.path === '/v1/chat/completions') {
+        if (req.path === '/v1/credits' ||
+            req.path === '/api/v1/credits' ||
+            req.path === '/api/v1/me/credits' ||
+            req.path === '/v1/models' ||
+            req.path === '/v1/auth/key' ||
+            req.path === '/v1/chat/completions') {
             return next();
         }
         (0, helmet_1.default)()(req, res, next);
     });
     app.use((0, cors_1.default)());
-    const limiter = (0, express_rate_limit_1.default)({
-        windowMs: RATE_LIMIT_WINDOW_MS,
-        max: RATE_LIMIT_MAX_REQUESTS,
-        message: {
-            error: {
-                code: 'RATE_LIMIT_EXCEEDED',
-                message: 'Too many requests',
-                correlationId: '',
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        const limiter = (0, express_rate_limit_1.default)({
+            windowMs: RATE_LIMIT_WINDOW_MS,
+            max: RATE_LIMIT_MAX_REQUESTS,
+            message: {
+                error: {
+                    code: 'RATE_LIMIT_EXCEEDED',
+                    message: 'Too many requests',
+                    correlationId: '',
+                },
             },
-        },
-        standardHeaders: true,
-        legacyHeaders: false,
+            standardHeaders: true,
+            legacyHeaders: false,
+        });
+        app.use(limiter);
+    }
+    app.use(express_1.default.json({ limit: '100mb' }));
+    app.use(express_1.default.raw({ type: 'application/octet-stream', limit: '100mb' }));
+    app.use((error, req, res, next) => {
+        if (error.type === 'entity.too.large') {
+            res.status(413).json({
+                error: {
+                    code: 'PAYLOAD_TOO_LARGE',
+                    message: 'Request payload too large',
+                    correlationId: req.correlationId || 'unknown',
+                },
+            });
+            return;
+        }
+        next(error);
     });
-    app.use(limiter);
-    app.use(express_1.default.json({ limit: '1mb' }));
-    app.use(express_1.default.raw({ type: 'application/octet-stream', limit: '1mb' }));
     app.use((req, res, next) => {
         const correlationId = (0, uuid_1.v4)();
         req.correlationId = correlationId;
@@ -83,7 +105,7 @@ function createApp() {
             const response = healthStatus.toExpressResponse();
             res.status(response.status).set(response.headers).json(response.body);
         }
-        catch (_error) {
+        catch {
             const healthStatus = HealthStatus_1.HealthStatus.createUnhealthy('Health check failed', '1.0.0');
             const response = healthStatus.toExpressResponse();
             res.status(response.status).set(response.headers).json(response.body);
@@ -117,20 +139,33 @@ function createApp() {
             const proxyResponse = await proxyService.makeRequest(keyRequest);
             if (proxyResponse.status >= 400) {
                 let errorCode = 'UPSTREAM_ERROR';
-                let statusCode = 502;
-                if (proxyResponse.status === 401) {
+                let statusCode = proxyResponse.status;
+                if (proxyResponse.status === 400) {
+                    errorCode = 'BAD_REQUEST';
+                }
+                else if (proxyResponse.status === 401) {
                     errorCode = 'UNAUTHORIZED';
-                    statusCode = 401;
+                }
+                else if (proxyResponse.status === 402) {
+                    errorCode = 'INSUFFICIENT_CREDITS';
+                }
+                else if (proxyResponse.status === 404) {
+                    errorCode = 'NOT_FOUND';
+                }
+                else if (proxyResponse.status === 408) {
+                    errorCode = 'REQUEST_TIMEOUT';
                 }
                 else if (proxyResponse.status === 429) {
                     errorCode = 'RATE_LIMIT_EXCEEDED';
-                    statusCode = 429;
+                }
+                else if (proxyResponse.status >= 500) {
+                    statusCode = 502;
                 }
                 const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse(errorCode, typeof proxyResponse.data === 'object' &&
                     proxyResponse.data &&
                     'error' in proxyResponse.data
-                    ? proxyResponse.data.error.message ||
-                        'OpenRouter API error'
+                    ? proxyResponse.data.error
+                        .message || 'OpenRouter API error'
                     : 'OpenRouter API unavailable', statusCode, correlationId);
                 if (proxyResponse.status === 429 &&
                     proxyResponse.headers['retry-after']) {
@@ -182,20 +217,24 @@ function createApp() {
             const proxyResponse = await proxyService.makeRequest(keyRequest);
             if (proxyResponse.status >= 400) {
                 let errorCode = 'UPSTREAM_ERROR';
-                let statusCode = 502;
+                const statusCode = proxyResponse.status;
                 if (proxyResponse.status === 401) {
                     errorCode = 'UNAUTHORIZED';
-                    statusCode = 401;
+                }
+                else if (proxyResponse.status === 402) {
+                    errorCode = 'INSUFFICIENT_CREDITS';
+                }
+                else if (proxyResponse.status === 408) {
+                    errorCode = 'REQUEST_TIMEOUT';
                 }
                 else if (proxyResponse.status === 429) {
                     errorCode = 'RATE_LIMIT_EXCEEDED';
-                    statusCode = 429;
                 }
                 const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse(errorCode, typeof proxyResponse.data === 'object' &&
                     proxyResponse.data &&
                     'error' in proxyResponse.data
-                    ? proxyResponse.data.error.message ||
-                        'OpenRouter API error'
+                    ? proxyResponse.data.error
+                        .message || 'OpenRouter API error'
                     : 'OpenRouter API unavailable', statusCode, correlationId);
                 if (proxyResponse.status === 429 &&
                     proxyResponse.headers['retry-after']) {
@@ -230,12 +269,118 @@ function createApp() {
                 .json(errorResponse.body);
         }
     });
-    app.use('/api/v1', async (req, res, next) => {
-        if ((req.path === '/me/credits' || req.path === '/credits') && req.method === 'GET') {
+    app.use('/api/v1/chat/completions', async (req, res, next) => {
+        if (req.method !== 'POST' || !req.body) {
             return next();
         }
         const correlationId = req.correlationId;
         try {
+            const chatRequest = req.body;
+            if (!balanceInjectionService.isNewSession(chatRequest)) {
+                return next();
+            }
+            const authToken = AuthToken_1.AuthToken.fromRequest(req);
+            if (!authToken || !authToken.isValid) {
+                return next();
+            }
+            if (!chatRequest.stream) {
+                return next();
+            }
+            console.log(`[${correlationId}] New chat session detected, injecting balance`);
+            const balance = await balanceInjectionService.getUserBalance(authToken, correlationId);
+            if (!balance) {
+                console.log(`[${correlationId}] Failed to fetch balance, skipping injection`);
+                return next();
+            }
+            res.writeHead(200, {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Transfer-Encoding': 'chunked',
+                'Access-Control-Allow-Origin': '*',
+                'X-Correlation-Id': correlationId,
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            });
+            const chatId = balanceInjectionService.generateChatId();
+            const balanceChunk = balanceInjectionService.createBalanceChunk(chatId, chatRequest.model || 'unknown', balance);
+            res.write(balanceInjectionService.formatAsSSE(balanceChunk));
+            const completionChunk = balanceInjectionService.createCompletionChunk(chatId, chatRequest.model || 'unknown');
+            res.write(balanceInjectionService.formatAsSSE(completionChunk));
+            setTimeout(async () => {
+                try {
+                    const openRouterRequest = OpenRouterRequest_1.OpenRouterRequest.fromProxyRequest({
+                        method: 'POST',
+                        path: '/api/v1/chat/completions',
+                        headers: req.headers,
+                        body: chatRequest,
+                        query: req.query,
+                    }, OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS).withCorrelationId(correlationId);
+                    const proxyResponse = await proxyService.makeRequest(openRouterRequest);
+                    if (proxyResponse.status >= 400) {
+                        const errorChunk = {
+                            id: chatId,
+                            object: 'chat.completion.chunk',
+                            created: Math.floor(Date.now() / 1000),
+                            model: chatRequest.model || 'unknown',
+                            choices: [{
+                                    index: 0,
+                                    delta: { content: `\n\n⚠️ Error: ${proxyResponse.status}` },
+                                    finish_reason: 'stop',
+                                }],
+                        };
+                        res.write(balanceInjectionService.formatAsSSE(errorChunk));
+                        res.write('data: [DONE]\n\n');
+                        res.end();
+                        return;
+                    }
+                    const continuationChunk = {
+                        id: chatId,
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: chatRequest.model || 'unknown',
+                        choices: [{
+                                index: 0,
+                                delta: { content: '\n\nProcessing your request...' },
+                                finish_reason: 'stop',
+                            }],
+                    };
+                    res.write(balanceInjectionService.formatAsSSE(continuationChunk));
+                    res.write('data: [DONE]\n\n');
+                    res.end();
+                }
+                catch (error) {
+                    console.error(`[${correlationId}] Error continuing request:`, error);
+                    res.write('data: [DONE]\n\n');
+                    res.end();
+                }
+            }, 1000);
+            return;
+        }
+        catch (error) {
+            console.error(`[${correlationId}] Balance injection error:`, error);
+            return next();
+        }
+    });
+    app.use('/api/v1', async (req, res, next) => {
+        if ((req.path === '/me/credits' || req.path === '/credits') &&
+            req.method === 'GET') {
+            return next();
+        }
+        const correlationId = req.correlationId;
+        try {
+            const authToken = AuthToken_1.AuthToken.fromRequest(req);
+            if (!authToken || !authToken.isValid) {
+                const errorResponse = {
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: authToken
+                            ? 'Invalid API key format'
+                            : 'Authorization header required',
+                        correlationId,
+                    },
+                };
+                res.status(401).json(errorResponse);
+                return;
+            }
             const fullPath = `/api/v1${req.path}`;
             const openRouterRequest = OpenRouterRequest_1.OpenRouterRequest.fromProxyRequest({
                 method: req.method,
@@ -246,6 +391,53 @@ function createApp() {
             }, OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
             const requestWithCorrelation = openRouterRequest.withCorrelationId(correlationId);
             const proxyResponse = await proxyService.makeRequest(requestWithCorrelation);
+            if (proxyResponse.status >= 400) {
+                if (proxyResponse.status === 401 &&
+                    proxyResponse.data &&
+                    typeof proxyResponse.data === 'object' &&
+                    'error' in proxyResponse.data) {
+                    res.set('x-correlation-id', correlationId);
+                    res.status(401).json(proxyResponse.data);
+                    return;
+                }
+                let errorCode = 'UPSTREAM_ERROR';
+                let statusCode = proxyResponse.status;
+                if (proxyResponse.status === 400) {
+                    errorCode = 'BAD_REQUEST';
+                }
+                else if (proxyResponse.status === 401) {
+                    errorCode = 'UNAUTHORIZED';
+                }
+                else if (proxyResponse.status === 402) {
+                    errorCode = 'INSUFFICIENT_CREDITS';
+                }
+                else if (proxyResponse.status === 404) {
+                    errorCode = 'NOT_FOUND';
+                }
+                else if (proxyResponse.status === 408) {
+                    errorCode = 'REQUEST_TIMEOUT';
+                }
+                else if (proxyResponse.status === 429) {
+                    errorCode = 'RATE_LIMIT_EXCEEDED';
+                }
+                else if (proxyResponse.status >= 500) {
+                    statusCode = 502;
+                }
+                const errorResponse = {
+                    error: {
+                        code: errorCode,
+                        message: typeof proxyResponse.data === 'object' &&
+                            proxyResponse.data &&
+                            'error' in proxyResponse.data
+                            ? proxyResponse.data.error
+                                .message || 'OpenRouter API error'
+                            : 'OpenRouter API error',
+                        correlationId,
+                    },
+                };
+                res.status(statusCode).json(errorResponse);
+                return;
+            }
             const responseHeaders = { ...proxyResponse.headers };
             delete responseHeaders['transfer-encoding'];
             res.status(proxyResponse.status).set(responseHeaders);
@@ -286,20 +478,24 @@ function createApp() {
             const proxyResponse = await proxyService.makeRequest(keyRequest);
             if (proxyResponse.status >= 400) {
                 let errorCode = 'UPSTREAM_ERROR';
-                let statusCode = 502;
+                const statusCode = proxyResponse.status;
                 if (proxyResponse.status === 401) {
                     errorCode = 'UNAUTHORIZED';
-                    statusCode = 401;
+                }
+                else if (proxyResponse.status === 402) {
+                    errorCode = 'INSUFFICIENT_CREDITS';
+                }
+                else if (proxyResponse.status === 408) {
+                    errorCode = 'REQUEST_TIMEOUT';
                 }
                 else if (proxyResponse.status === 429) {
                     errorCode = 'RATE_LIMIT_EXCEEDED';
-                    statusCode = 429;
                 }
                 const errorResponse = CreditResponse_1.CreditResponse.createErrorResponse(errorCode, typeof proxyResponse.data === 'object' &&
                     proxyResponse.data &&
                     'error' in proxyResponse.data
-                    ? proxyResponse.data.error.message ||
-                        'OpenRouter API error'
+                    ? proxyResponse.data.error
+                        .message || 'OpenRouter API error'
                     : 'OpenRouter API unavailable', statusCode, correlationId);
                 if (proxyResponse.status === 429 &&
                     proxyResponse.headers['retry-after']) {
@@ -337,6 +533,20 @@ function createApp() {
     app.get('/v1/models', async (req, res) => {
         const correlationId = req.correlationId;
         try {
+            const authToken = AuthToken_1.AuthToken.fromRequest(req);
+            if (!authToken || !authToken.isValid) {
+                const errorResponse = {
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: authToken
+                            ? 'Invalid API key format'
+                            : 'Authorization header required',
+                        correlationId,
+                    },
+                };
+                res.status(401).json(errorResponse);
+                return;
+            }
             const fullPath = req.path.replace('/v1', '/api/v1');
             const openRouterRequest = OpenRouterRequest_1.OpenRouterRequest.fromProxyRequest({
                 method: req.method,
@@ -351,7 +561,9 @@ function createApp() {
                 proxyResponse.data.includes('<!DOCTYPE html>') &&
                 proxyResponse.data.includes('Cloudflare')) {
                 const authHeader = req.headers.authorization;
-                if (authHeader && authHeader.includes('sk-or-v1-') && process.env.OPENROUTER_TEST_API_KEY) {
+                if (authHeader &&
+                    authHeader.includes('sk-or-v1-') &&
+                    process.env.OPENROUTER_TEST_API_KEY) {
                     console.log(`[${correlationId}] Cloudflare blocked real API key - returning 502 error`);
                     const errorResponse = {
                         error: {
@@ -371,11 +583,27 @@ function createApp() {
                 console.log(`[${correlationId}] Cloudflare blocked - returning mock models response for local dev`);
                 const mockModelsResponse = {
                     data: [
-                        { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", pricing: { prompt: "0.0015", completion: "0.002" } },
-                        { id: "gpt-4", name: "GPT-4", pricing: { prompt: "0.03", completion: "0.06" } },
-                        { id: "claude-3-haiku", name: "Claude 3 Haiku", pricing: { prompt: "0.00025", completion: "0.00125" } },
-                        { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", pricing: { prompt: "0.00075", completion: "0.003" } }
-                    ]
+                        {
+                            id: 'gpt-3.5-turbo',
+                            name: 'GPT-3.5 Turbo',
+                            pricing: { prompt: '0.0015', completion: '0.002' },
+                        },
+                        {
+                            id: 'gpt-4',
+                            name: 'GPT-4',
+                            pricing: { prompt: '0.03', completion: '0.06' },
+                        },
+                        {
+                            id: 'claude-3-haiku',
+                            name: 'Claude 3 Haiku',
+                            pricing: { prompt: '0.00025', completion: '0.00125' },
+                        },
+                        {
+                            id: 'google/gemini-2.5-flash',
+                            name: 'Gemini 2.5 Flash',
+                            pricing: { prompt: '0.00075', completion: '0.003' },
+                        },
+                    ],
                 };
                 res.writeHead(200, {
                     'Content-Type': 'application/json',
@@ -383,6 +611,62 @@ function createApp() {
                     'X-Correlation-Id': correlationId,
                 });
                 res.end(JSON.stringify(mockModelsResponse));
+                return;
+            }
+            if (proxyResponse.status >= 400) {
+                if (proxyResponse.status === 401 &&
+                    proxyResponse.data &&
+                    typeof proxyResponse.data === 'object' &&
+                    'error' in proxyResponse.data) {
+                    res.writeHead(401, {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'X-Correlation-Id': correlationId,
+                    });
+                    res.end(JSON.stringify(proxyResponse.data));
+                    return;
+                }
+                let errorCode = 'UPSTREAM_ERROR';
+                let statusCode = proxyResponse.status;
+                if (proxyResponse.status === 400) {
+                    errorCode = 'BAD_REQUEST';
+                }
+                else if (proxyResponse.status === 401) {
+                    errorCode = 'UNAUTHORIZED';
+                }
+                else if (proxyResponse.status === 402) {
+                    errorCode = 'INSUFFICIENT_CREDITS';
+                }
+                else if (proxyResponse.status === 404) {
+                    errorCode = 'NOT_FOUND';
+                }
+                else if (proxyResponse.status === 408) {
+                    errorCode = 'REQUEST_TIMEOUT';
+                }
+                else if (proxyResponse.status === 429) {
+                    errorCode = 'RATE_LIMIT_EXCEEDED';
+                }
+                else if (proxyResponse.status >= 500) {
+                    statusCode = 502;
+                }
+                const errorResponse = {
+                    error: {
+                        code: errorCode,
+                        message: typeof proxyResponse.data === 'object' &&
+                            proxyResponse.data &&
+                            'error' in proxyResponse.data
+                            ? proxyResponse.data.error
+                                .message || 'OpenRouter API error'
+                            : 'OpenRouter API error',
+                        correlationId,
+                    },
+                };
+                res.writeHead(statusCode, {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'X-Correlation-Id': correlationId,
+                });
+                res.end(JSON.stringify(errorResponse));
                 return;
             }
             res.writeHead(proxyResponse.status, {
@@ -428,7 +712,9 @@ function createApp() {
                 proxyResponse.data.includes('<!DOCTYPE html>') &&
                 proxyResponse.data.includes('Cloudflare')) {
                 const authHeader = req.headers.authorization;
-                if (authHeader && authHeader.includes('sk-or-v1-') && process.env.OPENROUTER_TEST_API_KEY) {
+                if (authHeader &&
+                    authHeader.includes('sk-or-v1-') &&
+                    process.env.OPENROUTER_TEST_API_KEY) {
                     console.log(`[${correlationId}] Cloudflare blocked real API key - returning 502 error`);
                     const errorResponse = {
                         error: {
@@ -448,13 +734,13 @@ function createApp() {
                 console.log(`[${correlationId}] Cloudflare blocked - returning mock auth/key response for local dev`);
                 const mockAuthResponse = {
                     data: {
-                        name: "Local Development Mock",
-                        models: ["gpt-3.5-turbo", "gpt-4", "claude-3-haiku"],
+                        name: 'Local Development Mock',
+                        models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-haiku'],
                         api_key: req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
                         monthly_limit: 100000,
                         usage: 0,
-                        is_valid: true
-                    }
+                        is_valid: true,
+                    },
                 };
                 res.writeHead(200, {
                     'Content-Type': 'application/json',
@@ -508,7 +794,7 @@ function createApp() {
                 targetOptions.method = req.method;
                 targetOptions.headers = proxyHeaders;
                 const proxyReq = https.request(targetOptions, (proxyRes) => {
-                    res.status(proxyRes.statusCode);
+                    res.status(proxyRes.statusCode || 500);
                     const responseHeaders = { ...proxyRes.headers };
                     delete responseHeaders['transfer-encoding'];
                     res.set(responseHeaders);
@@ -546,7 +832,9 @@ function createApp() {
                 proxyResponse.data.includes('<!DOCTYPE html>') &&
                 proxyResponse.data.includes('Cloudflare')) {
                 const authHeader = req.headers.authorization;
-                if (authHeader && authHeader.includes('sk-or-v1-') && process.env.OPENROUTER_TEST_API_KEY) {
+                if (authHeader &&
+                    authHeader.includes('sk-or-v1-') &&
+                    process.env.OPENROUTER_TEST_API_KEY) {
                     console.log(`[${correlationId}] Cloudflare blocked real API key on ${req.path} - returning 502 error`);
                     const errorResponse = {
                         error: {
@@ -562,11 +850,27 @@ function createApp() {
                     console.log(`[${correlationId}] Cloudflare blocked - returning mock models response for local dev`);
                     const mockModelsResponse = {
                         data: [
-                            { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", pricing: { prompt: "0.0015", completion: "0.002" } },
-                            { id: "gpt-4", name: "GPT-4", pricing: { prompt: "0.03", completion: "0.06" } },
-                            { id: "claude-3-haiku", name: "Claude 3 Haiku", pricing: { prompt: "0.00025", completion: "0.00125" } },
-                            { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", pricing: { prompt: "0.00075", completion: "0.003" } }
-                        ]
+                            {
+                                id: 'gpt-3.5-turbo',
+                                name: 'GPT-3.5 Turbo',
+                                pricing: { prompt: '0.0015', completion: '0.002' },
+                            },
+                            {
+                                id: 'gpt-4',
+                                name: 'GPT-4',
+                                pricing: { prompt: '0.03', completion: '0.06' },
+                            },
+                            {
+                                id: 'claude-3-haiku',
+                                name: 'Claude 3 Haiku',
+                                pricing: { prompt: '0.00025', completion: '0.00125' },
+                            },
+                            {
+                                id: 'google/gemini-2.5-flash',
+                                name: 'Gemini 2.5 Flash',
+                                pricing: { prompt: '0.00075', completion: '0.003' },
+                            },
+                        ],
                     };
                     res.status(200).set({
                         'Content-Type': 'application/json',
@@ -592,6 +896,45 @@ function createApp() {
                 }
                 return;
             }
+            if (proxyResponse.status >= 400) {
+                let errorCode = 'UPSTREAM_ERROR';
+                let statusCode = proxyResponse.status;
+                if (proxyResponse.status === 400) {
+                    errorCode = 'BAD_REQUEST';
+                }
+                else if (proxyResponse.status === 401) {
+                    errorCode = 'UNAUTHORIZED';
+                }
+                else if (proxyResponse.status === 402) {
+                    errorCode = 'INSUFFICIENT_CREDITS';
+                }
+                else if (proxyResponse.status === 404) {
+                    errorCode = 'NOT_FOUND';
+                }
+                else if (proxyResponse.status === 408) {
+                    errorCode = 'REQUEST_TIMEOUT';
+                }
+                else if (proxyResponse.status === 429) {
+                    errorCode = 'RATE_LIMIT_EXCEEDED';
+                }
+                else if (proxyResponse.status >= 500) {
+                    statusCode = 502;
+                }
+                const errorResponse = {
+                    error: {
+                        code: errorCode,
+                        message: typeof proxyResponse.data === 'object' &&
+                            proxyResponse.data &&
+                            'error' in proxyResponse.data
+                            ? proxyResponse.data.error
+                                .message || 'OpenRouter API error'
+                            : 'OpenRouter API error',
+                        correlationId,
+                    },
+                };
+                res.status(statusCode).json(errorResponse);
+                return;
+            }
             const responseHeaders = { ...proxyResponse.headers };
             delete responseHeaders['transfer-encoding'];
             res.status(proxyResponse.status).set(responseHeaders);
@@ -615,7 +958,7 @@ function createApp() {
             res.status(502).json(errorResponse);
         }
     });
-    app.use((req, res, _next) => {
+    app.use((req, res) => {
         const correlationId = req.correlationId;
         res.status(404).json({
             error: {
@@ -625,8 +968,9 @@ function createApp() {
             },
         });
     });
-    app.use((_error, req, res, _next) => {
+    app.use((error, req, res, next) => {
         const correlationId = req.correlationId || (0, uuid_1.v4)();
+        console.error('Unhandled error:', error.message, { correlationId });
         res.status(500).json({
             error: {
                 code: 'INTERNAL_ERROR',

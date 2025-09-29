@@ -22,7 +22,11 @@ export function configureTrustProxy(app: Express): void {
 /**
  * Security middleware - skip for specific endpoints to match OpenRouter headers
  */
-export function securityMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function securityMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   if (
     req.path === '/v1/credits' ||
     req.path === '/api/v1/credits' ||

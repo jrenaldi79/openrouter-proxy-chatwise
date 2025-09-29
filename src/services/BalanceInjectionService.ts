@@ -51,7 +51,9 @@ export class BalanceInjectionService {
   /**
    * Detects if the request is from ChatWise client
    */
-  public isChatWiseClient(headers: Record<string, string | string[] | undefined>): boolean {
+  public isChatWiseClient(
+    headers: Record<string, string | string[] | undefined>
+  ): boolean {
     const userAgent = String(headers['user-agent'] || '').toLowerCase();
     const origin = String(headers['origin'] || '');
     const referer = String(headers['referer'] || '');
@@ -105,14 +107,16 @@ export class BalanceInjectionService {
     correlationId: string
   ): Promise<{ totalCredits: number; usedCredits: number } | null> {
     try {
-      Logger.balanceDebug('Fetching balance for token', correlationId, { tokenPrefix: authToken.token.substring(0, 20) });
+      Logger.balanceDebug('Fetching balance for token', correlationId, {
+        tokenPrefix: authToken.token.substring(0, 20),
+      });
 
       // Create request to OpenRouter's key endpoint (same as credit transformation)
       const openRouterRequest = OpenRouterRequest.fromProxyRequest(
         {
           method: 'GET',
           path: '/api/v1/key',
-          headers: { 'Authorization': authToken.getAuthorizationHeader() },
+          headers: { Authorization: authToken.getAuthorizationHeader() },
           body: {},
           query: {},
         },
@@ -120,11 +124,17 @@ export class BalanceInjectionService {
         this.requestTimeoutMs
       ).withCorrelationId(correlationId);
 
-      Logger.balanceDebug('Making request to OpenRouter API', correlationId, { url: openRouterRequest.url, headers: openRouterRequest.headers });
+      Logger.balanceDebug('Making request to OpenRouter API', correlationId, {
+        url: openRouterRequest.url,
+        headers: openRouterRequest.headers,
+      });
 
       const response = await this.proxyService.makeRequest(openRouterRequest);
 
-      Logger.balanceDebug('Balance API response received', correlationId, { status: response.status, data: response.data });
+      Logger.balanceDebug('Balance API response received', correlationId, {
+        status: response.status,
+        data: response.data,
+      });
 
       if (response.status === 200 && response.data) {
         // OpenRouter API returns { data: { ... } } structure
@@ -133,7 +143,10 @@ export class BalanceInjectionService {
           const keyResponse = KeyResponse.fromApiResponse(apiData.data);
           const remainingCredits = keyResponse.getRemainingCredits();
 
-          Logger.balanceDebug('Balance parsing successful', correlationId, { remainingCredits, usage: keyResponse.usage });
+          Logger.balanceDebug('Balance parsing successful', correlationId, {
+            remainingCredits,
+            usage: keyResponse.usage,
+          });
 
           if (remainingCredits !== null) {
             return {
@@ -150,10 +163,17 @@ export class BalanceInjectionService {
         }
       }
 
-      Logger.balanceError('Balance fetch failed - invalid response', correlationId);
+      Logger.balanceError(
+        'Balance fetch failed - invalid response',
+        correlationId
+      );
       return null;
     } catch (error) {
-      Logger.balanceError('Failed to fetch user balance', correlationId, error instanceof Error ? error : new Error(String(error)));
+      Logger.balanceError(
+        'Failed to fetch user balance',
+        correlationId,
+        error instanceof Error ? error : new Error(String(error))
+      );
       return null;
     }
   }
@@ -166,9 +186,10 @@ export class BalanceInjectionService {
     model: string,
     balance: { totalCredits: number; usedCredits: number }
   ): StreamingChunk {
-    const balanceText = balance.totalCredits === -1
-      ? `💰 Account: Unlimited credits (${balance.usedCredits} used)`
-      : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)`;
+    const balanceText =
+      balance.totalCredits === -1
+        ? `💰 Account: Unlimited credits (${balance.usedCredits} used)`
+        : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)`;
 
     return {
       id: chatId,

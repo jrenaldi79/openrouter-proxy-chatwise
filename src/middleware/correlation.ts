@@ -9,7 +9,11 @@ import { Logger } from '../utils/logger';
 /**
  * Correlation ID and debug logging middleware
  */
-export function correlationMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function correlationMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   const correlationId = uuidv4();
   req.correlationId = correlationId;
   res.setHeader('X-Correlation-Id', correlationId);
@@ -19,7 +23,7 @@ export function correlationMiddleware(req: Request, res: Response, next: NextFun
 
   Logger.debug(`Request headers and body logged`, correlationId, {
     headers: req.headers,
-    body: req.body && Object.keys(req.body).length > 0 ? req.body : undefined
+    body: req.body && Object.keys(req.body).length > 0 ? req.body : undefined,
   });
 
   next();

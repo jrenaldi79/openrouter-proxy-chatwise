@@ -136,10 +136,40 @@ class OpenRouterRequest {
         Object.entries(proxyRequest.query).forEach(([key, value]) => {
             url.searchParams.set(key, value);
         });
+        const problematicHeaders = new Set([
+            'host',
+            'connection',
+            'upgrade',
+            'proxy-authenticate',
+            'proxy-authorization',
+            'te',
+            'trailer',
+            'transfer-encoding',
+            ':authority',
+            ':method',
+            ':path',
+            ':scheme',
+            'x-forwarded-for',
+            'x-forwarded-proto',
+            'x-forwarded-host',
+            'x-real-ip',
+            'if-modified-since',
+            'if-none-match',
+            'if-range',
+            'if-unmodified-since',
+            'range',
+        ]);
+        const safeHeaders = {};
+        Object.entries(proxyRequest.headers).forEach(([key, value]) => {
+            if (!problematicHeaders.has(key.toLowerCase()) &&
+                typeof value === 'string') {
+                safeHeaders[key] = value;
+            }
+        });
         return new OpenRouterRequest({
             url: url.toString(),
             method: proxyRequest.method,
-            headers: proxyRequest.headers,
+            headers: safeHeaders,
             body: proxyRequest.body,
             timeout,
             retryConfig,

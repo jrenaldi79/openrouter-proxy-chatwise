@@ -35,7 +35,7 @@ export declare class HealthStatus {
     };
     static create(openrouterConnectivity: ConnectivityStatus, cacheStatus?: CacheStatus, startTime?: number, version?: string): HealthStatus;
     static createHealthy(uptime?: number, version?: string): HealthStatus;
-    static createUnhealthy(_reason?: string, version?: string): HealthStatus;
+    static createUnhealthy(reason?: string, version?: string): HealthStatus;
     static createDegraded(openrouterStatus: ConnectivityStatus, cacheStatus: CacheStatus, uptime?: number, version?: string): HealthStatus;
     withUpdatedConnectivity(connectivity: ConnectivityStatus): HealthStatus;
     withUpdatedCacheStatus(cacheStatus: CacheStatus): HealthStatus;

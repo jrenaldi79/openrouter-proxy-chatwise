@@ -5,7 +5,7 @@ class KeyResponse {
     constructor(data) {
         this.limit = data.limit;
         this.usage = data.usage;
-        const { limit, usage, ...rest } = data;
+        const { limit: _limit, usage: _usage, ...rest } = data;
         this.additionalFields = rest;
         this.validate();
     }

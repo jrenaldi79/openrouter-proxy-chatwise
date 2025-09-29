@@ -134,17 +134,20 @@ class CreditResponse {
             throw new Error('Invalid key response data: not an object');
         }
         const keyData = data;
+        if (!('usage' in keyData)) {
+            throw new Error('Invalid response: missing required usage field');
+        }
         if (typeof keyData.usage !== 'number') {
-            throw new Error('Invalid key response data: usage must be a number');
+            throw new Error('Invalid data type: usage must be a number');
         }
         if (keyData.usage < 0) {
-            throw new Error('Invalid key response data: usage must be non-negative');
+            throw new Error('Invalid value: usage must be non-negative');
         }
         if (keyData.limit !== null && typeof keyData.limit !== 'number') {
-            throw new Error('Invalid key response data: limit must be a number or null');
+            throw new Error('Invalid data type: limit must be a number or null');
         }
         if (typeof keyData.limit === 'number' && keyData.limit < 0) {
-            throw new Error('Invalid key response data: limit must be non-negative');
+            throw new Error('Invalid value: limit must be non-negative');
         }
         return {
             limit: keyData.limit,

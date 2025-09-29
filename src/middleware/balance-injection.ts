@@ -121,10 +121,12 @@ export async function balanceInjectionMiddleware(
     }
 
     // Create balance text to prepend to first LLM response
+    const usedDollars = balance.usedCredits.toFixed(2);
+    const totalDollars = balance.totalCredits.toFixed(2);
     const balanceText =
       balance.totalCredits === -1
-        ? `💰 Account: Unlimited credits (${balance.usedCredits} used)\n\n`
-        : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)\n\n`;
+        ? `💰 Account: Unlimited credits ($${usedDollars} used)\n\n`
+        : `💰 Balance: $${totalDollars} remaining ($${usedDollars} used)\n\n`;
 
     Logger.balanceInfo(
       'Setting up streaming with balance injection',

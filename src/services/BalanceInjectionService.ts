@@ -179,6 +179,14 @@ export class BalanceInjectionService {
   }
 
   /**
+   * Converts credits to dollars (1 credit = $0.001 USD)
+   */
+  private creditsToDollars(credits: number): string {
+    const dollars = credits * 0.001;
+    return dollars.toFixed(2);
+  }
+
+  /**
    * Creates a balance message chunk for streaming
    */
   public createBalanceChunk(
@@ -186,10 +194,12 @@ export class BalanceInjectionService {
     model: string,
     balance: { totalCredits: number; usedCredits: number }
   ): StreamingChunk {
+    const usedDollars = this.creditsToDollars(balance.usedCredits);
+
     const balanceText =
       balance.totalCredits === -1
-        ? `💰 Account: Unlimited credits (${balance.usedCredits} used)`
-        : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)`;
+        ? `💰 Account: Unlimited credits ($${usedDollars} used)`
+        : `💰 Balance: $${this.creditsToDollars(balance.totalCredits)} remaining ($${usedDollars} used)`;
 
     return {
       id: chatId,

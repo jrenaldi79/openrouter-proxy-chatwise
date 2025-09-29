@@ -1,0 +1,28 @@
+{
+  "displayName": "OpenRouter Proxy - Service Down",
+  "documentation": {
+    "content": "Alert when the OpenRouter proxy service becomes unavailable or health checks fail. This is a critical alert indicating service outage."
+  },
+  "conditions": [
+    {
+      "displayName": "Service uptime condition",
+      "conditionThreshold": {
+        "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"openrouter-proxy\" AND metric.type=\"run.googleapis.com/request_count\"",
+        "comparison": "LESS_THAN",
+        "thresholdValue": 1,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "notificationChannels": [
+    "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
+  ],
+  "enabled": true
+}

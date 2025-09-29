@@ -1,0 +1,28 @@
+{
+  "displayName": "OpenRouter Proxy - High Error Rate",
+  "documentation": {
+    "content": "Alert when the OpenRouter proxy has more than 5% error rate (4xx/5xx responses) over 5 minutes. This indicates potential issues with the service or OpenRouter API."
+  },
+  "conditions": [
+    {
+      "displayName": "Error rate condition",
+      "conditionThreshold": {
+        "filter": "resource.type=\"logging_metric\" AND metric.type=\"logging.googleapis.com/user/openrouter_proxy_errors\"",
+        "comparison": "GREATER_THAN",
+        "thresholdValue": 5,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "notificationChannels": [
+    "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
+  ],
+  "enabled": true
+}

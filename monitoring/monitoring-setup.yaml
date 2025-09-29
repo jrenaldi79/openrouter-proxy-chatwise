@@ -1,0 +1,61 @@
+# OpenRouter Proxy Monitoring Configuration
+# This file defines the monitoring setup for the OpenRouter proxy service
+
+# Log-based metrics configuration
+logMetrics:
+  - name: "openrouter_proxy_errors"
+    description: "Count of 4xx and 5xx errors from the proxy"
+    filter: |
+      resource.type="cloud_run_revision"
+      resource.labels.service_name="openrouter-proxy"
+      httpRequest.status>=400
+
+  - name: "openrouter_api_failures"
+    description: "Failed requests to OpenRouter API"
+    filter: |
+      resource.type="cloud_run_revision"
+      resource.labels.service_name="openrouter-proxy"
+      (textPayload:"OpenRouter API error" OR textPayload:"Connection timeout" OR textPayload:"ECONNREFUSED")
+
+  - name: "openrouter_proxy_high_latency"
+    description: "Requests taking longer than 2 seconds"
+    filter: |
+      resource.type="cloud_run_revision"
+      resource.labels.service_name="openrouter-proxy"
+      httpRequest.latency>"2s"
+
+# Alert policies configuration
+alertPolicies:
+  - name: "High Error Rate Alert"
+    condition: "Rate of openrouter_proxy_errors > 5% over 5 minutes"
+    threshold: 0.05
+    duration: "300s"
+
+  - name: "OpenRouter API Failures"
+    condition: "Rate of openrouter_api_failures > 10% over 2 minutes"
+    threshold: 0.10
+    duration: "120s"
+
+  - name: "High Latency Alert"
+    condition: "Rate of high latency requests > 20% over 1 minute"
+    threshold: 0.20
+    duration: "60s"
+
+  - name: "Service Health Check Failure"
+    condition: "Health check uptime < 95% over 5 minutes"
+    threshold: 0.95
+    duration: "300s"
+
+# Notification channels
+notifications:
+  email: "jrenaldi79@gmail.com"  # Replace with your email
+
+# Dashboard configuration
+dashboard:
+  name: "OpenRouter Proxy Monitoring"
+  widgets:
+    - "Request Rate"
+    - "Error Rate"
+    - "Response Latency"
+    - "OpenRouter API Health"
+    - "Resource Utilization"

@@ -1,6 +1,7 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import https from 'https';
 import { OpenRouterRequest } from '../models/OpenRouterRequest';
+import { Logger } from '../utils/logger';
 
 export interface ProxyResponse {
   status: number;
@@ -73,7 +74,7 @@ export class ProxyService {
         return response;
       } catch (fetchError) {
         // Fallback to axios if fetch fails
-        console.warn('Fetch failed, falling back to axios:', fetchError);
+        Logger.warn('Fetch failed, falling back to axios', request.getCorrelationId(), { error: fetchError instanceof Error ? fetchError.message : String(fetchError) });
       }
     }
 

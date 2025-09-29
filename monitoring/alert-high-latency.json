@@ -1,0 +1,28 @@
+{
+  "displayName": "OpenRouter Proxy - High Latency",
+  "documentation": {
+    "content": "Alert when the OpenRouter proxy has requests taking longer than 2 seconds. This indicates performance issues that could affect user experience."
+  },
+  "conditions": [
+    {
+      "displayName": "High latency condition",
+      "conditionThreshold": {
+        "filter": "resource.type=\"logging_metric\" AND metric.type=\"logging.googleapis.com/user/openrouter_proxy_high_latency\"",
+        "comparison": "GREATER_THAN",
+        "thresholdValue": 2,
+        "duration": "120s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "notificationChannels": [
+    "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
+  ],
+  "enabled": true
+}

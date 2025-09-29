@@ -1,0 +1,1542 @@
+import express, { Express } from 'express';
+
+// Extend Express Request interface for balance injection
+declare global {
+  namespace Express {
+    interface Request {
+      balanceInjectionActive?: {
+        chatId: string;
+        responseStarted: boolean;
+      };
+    }
+  }
+}
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import { v4 as uuidv4 } from 'uuid';
+import { HealthStatus, ConnectivityStatus } from './models/HealthStatus';
+import { ProxyService } from './services/ProxyService';
+import { CreditResponse } from './models/CreditResponse';
+import { AuthToken } from './models/AuthToken';
+import { OpenRouterRequest } from './models/OpenRouterRequest';
+import { BalanceInjectionService, ChatCompletionRequest } from './services/BalanceInjectionService';
+import { Logger } from './utils/logger';
+
+// Environment configuration
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const OPENROUTER_BASE_URL =
+  process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai';
+const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
+  ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
+  : 30000;
+const RATE_LIMIT_WINDOW_MS = process.env.RATE_LIMIT_WINDOW_MS
+  ? parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10)
+  : 60000;
+const RATE_LIMIT_MAX_REQUESTS = process.env.RATE_LIMIT_MAX_REQUESTS
+  ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10)
+  : 100;
+
+// Global state
+const startTime = Date.now();
+const proxyService = new ProxyService(OPENROUTER_BASE_URL, REQUEST_TIMEOUT_MS);
+const balanceInjectionService = new BalanceInjectionService(
+  proxyService,
+  OPENROUTER_BASE_URL,
+  REQUEST_TIMEOUT_MS
+);
+
+export function createApp(): Express {
+  const app = express();
+
+  // Disable Express.js headers to match OpenRouter exactly
+  app.disable('x-powered-by');
+
+  // Trust proxy for Cloud Run (required for rate limiting)
+  // Only set trust proxy in production to avoid rate limiting issues in local development
+  if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', true);
+  }
+
+  // Security middleware - skip for specific endpoints to match OpenRouter headers
+  app.use((req, res, next) => {
+    if (
+      req.path === '/v1/credits' ||
+      req.path === '/api/v1/credits' ||
+      req.path === '/api/v1/me/credits' ||
+      req.path === '/v1/models' ||
+      req.path === '/v1/auth/key' ||
+      req.path === '/v1/chat/completions'
+    ) {
+      // Skip helmet for these endpoints to match OpenRouter exactly
+      return next();
+    }
+    helmet()(req, res, next);
+  });
+  app.use(cors());
+
+  // Rate limiting
+  // Skip rate limiting in test environment to avoid test interference
+  if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+    const limiter = rateLimit({
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      max: RATE_LIMIT_MAX_REQUESTS,
+      message: {
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'Too many requests',
+          correlationId: '',
+        },
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+    app.use(limiter);
+  }
+
+  // Body parsing - no size limit for LLM applications that can handle large text
+  app.use(express.json({ limit: '100mb' })); // High limit for large LLM inputs
+  app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
+
+  // Handle body parser errors (like payload too large)
+  app.use(
+    (
+      error: Error & { type?: string },
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction
+    ) => {
+      if (error.type === 'entity.too.large') {
+        res.status(413).json({
+          error: {
+            code: 'PAYLOAD_TOO_LARGE',
+            message: 'Request payload too large',
+            correlationId: req.correlationId || 'unknown',
+          },
+        });
+        return;
+      }
+      next(error);
+    }
+  );
+
+  // Correlation ID and debug logging middleware
+  app.use((req, res, next) => {
+    const correlationId = uuidv4();
+    req.correlationId = correlationId;
+    res.setHeader('X-Correlation-Id', correlationId);
+
+    // Debug logging for troubleshooting
+    console.log(`🚨 [${correlationId}] ${req.method} ${req.path}`);
+
+    // Log the request
+    Logger.request(req.method, req.path, correlationId);
+
+    console.log(
+      `[${correlationId}] Headers:`,
+      JSON.stringify(req.headers, null, 2)
+    );
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(
+        `[${correlationId}] Body:`,
+        JSON.stringify(req.body, null, 2)
+      );
+    }
+
+    next();
+  });
+
+  // Health check endpoint
+  app.get('/health', async (_req, res) => {
+    try {
+      // Skip connectivity check in test environment to avoid TLS issues
+      let connectivityStatus: ConnectivityStatus;
+      if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+        connectivityStatus = 'connected'; // Assume connected in test environment
+      } else {
+        connectivityStatus = (await proxyService.checkConnectivity())
+          ? 'connected'
+          : 'disconnected';
+      }
+
+      const healthStatus = HealthStatus.create(
+        connectivityStatus,
+        'operational',
+        startTime,
+        '1.0.0'
+      );
+      const response = healthStatus.toExpressResponse();
+
+      res.status(response.status).set(response.headers).json(response.body);
+    } catch {
+      const healthStatus = HealthStatus.createUnhealthy(
+        'Health check failed',
+        '1.0.0'
+      );
+      const response = healthStatus.toExpressResponse();
+
+      res.status(response.status).set(response.headers).json(response.body);
+    }
+  });
+
+  // Method validation for credits endpoint - only allow GET
+  app.use('/api/v1/me/credits', (req, res, next) => {
+    if (req.method !== 'GET') {
+      const correlationId = req.correlationId as string;
+      const errorResponse = CreditResponse.createErrorResponse(
+        'METHOD_NOT_ALLOWED',
+        'Only GET method is allowed for this endpoint',
+        405,
+        correlationId
+      );
+      return res
+        .status(errorResponse.status)
+        .set(errorResponse.headers)
+        .json(errorResponse.body);
+    }
+    return next();
+  });
+
+  // Credit transformation endpoint
+  app.get('/api/v1/me/credits', async (req, res) => {
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Validate authorization
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = CreditResponse.createErrorResponse(
+          'UNAUTHORIZED',
+          authToken
+            ? 'Invalid API key format'
+            : 'Authorization header required',
+          401,
+          correlationId
+        );
+        return res
+          .status(errorResponse.status)
+          .set(errorResponse.headers)
+          .json(errorResponse.body);
+      }
+
+      // Create request to OpenRouter /api/v1/key endpoint
+      const keyRequest = OpenRouterRequest.createKeyRequest(
+        authToken.getAuthorizationHeader(),
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS,
+        correlationId
+      );
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(keyRequest);
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = CreditResponse.createErrorResponse(
+          errorCode,
+          typeof proxyResponse.data === 'object' &&
+            proxyResponse.data &&
+            'error' in proxyResponse.data
+            ? (proxyResponse.data as { error: { message?: string } }).error
+                .message || 'OpenRouter API error'
+            : 'OpenRouter API unavailable',
+          statusCode,
+          correlationId
+        );
+
+        if (
+          proxyResponse.status === 429 &&
+          proxyResponse.headers['retry-after']
+        ) {
+          errorResponse.headers['Retry-After'] =
+            proxyResponse.headers['retry-after'];
+        }
+
+        return res
+          .status(errorResponse.status)
+          .set(errorResponse.headers)
+          .json(errorResponse.body);
+      }
+
+      // Transform the response - extract data from nested OpenRouter response
+      const openRouterResponse = proxyResponse.data as { data?: unknown };
+      const keyData = openRouterResponse.data;
+
+      const validatedData = CreditResponse.validateKeyResponseData(keyData);
+      const creditResponse = CreditResponse.fromKeyResponse(
+        validatedData,
+        correlationId,
+        proxyResponse.headers
+      );
+      const response = creditResponse
+        .withCacheHeaders('MISS')
+        .toExpressResponse();
+
+      // Bypass all middleware and send raw response to match OpenRouter exactly
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(response.body));
+      return;
+    } catch (error) {
+      const errorResponse = CreditResponse.createErrorResponse(
+        'INTERNAL_ERROR',
+        error instanceof Error ? error.message : 'Internal server error',
+        500,
+        correlationId
+      );
+      return res
+        .status(errorResponse.status)
+        .set(errorResponse.headers)
+        .json(errorResponse.body);
+    }
+  });
+
+  // Special handling for /api/v1/credits endpoint (transform using auth/key data)
+  app.get('/api/v1/credits', async (req, res) => {
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Validate authorization
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = CreditResponse.createErrorResponse(
+          'UNAUTHORIZED',
+          authToken
+            ? 'Invalid API key format'
+            : 'Authorization header required',
+          401,
+          correlationId
+        );
+        return res
+          .status(errorResponse.status)
+          .set(errorResponse.headers)
+          .json(errorResponse.body);
+      }
+
+      // Create request to OpenRouter /api/v1/auth/key endpoint
+      const keyRequest = OpenRouterRequest.createKeyRequest(
+        authToken.getAuthorizationHeader(),
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS,
+        correlationId
+      );
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(keyRequest);
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        let errorCode = 'UPSTREAM_ERROR';
+        const statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        }
+
+        const errorResponse = CreditResponse.createErrorResponse(
+          errorCode,
+          typeof proxyResponse.data === 'object' &&
+            proxyResponse.data &&
+            'error' in proxyResponse.data
+            ? (proxyResponse.data as { error: { message?: string } }).error
+                .message || 'OpenRouter API error'
+            : 'OpenRouter API unavailable',
+          statusCode,
+          correlationId
+        );
+
+        if (
+          proxyResponse.status === 429 &&
+          proxyResponse.headers['retry-after']
+        ) {
+          errorResponse.headers['Retry-After'] =
+            proxyResponse.headers['retry-after'];
+        }
+
+        return res
+          .status(errorResponse.status)
+          .set(errorResponse.headers)
+          .json(errorResponse.body);
+      }
+
+      // Transform auth/key response to credits API format as per OpenRouter docs
+      // https://openrouter.ai/docs/api-reference/get-credits
+      const openRouterResponse = proxyResponse.data as { data?: unknown };
+      const keyData = openRouterResponse.data;
+
+      const validatedData = CreditResponse.validateKeyResponseData(keyData);
+      const creditResponse = CreditResponse.fromKeyResponse(
+        validatedData,
+        correlationId,
+        proxyResponse.headers
+      );
+      const response = creditResponse
+        .withCacheHeaders('MISS')
+        .toExpressResponse();
+
+      // Bypass all middleware and send raw response to match OpenRouter exactly
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(response.body));
+      return;
+    } catch (error) {
+      const errorResponse = CreditResponse.createErrorResponse(
+        'INTERNAL_ERROR',
+        error instanceof Error ? error.message : 'Internal server error',
+        500,
+        correlationId
+      );
+      return res
+        .status(errorResponse.status)
+        .set(errorResponse.headers)
+        .json(errorResponse.body);
+    }
+  });
+
+  // Balance injection middleware for new chat sessions
+  app.use(['/api/v1/chat/completions', '/v1/chat/completions'], async (req, res, next) => {
+    const correlationId = req.correlationId as string;
+
+    // Track all requests to this middleware
+    Logger.balanceMiddleware(`${req.method} ${req.path} - body:${!!req.body}`, correlationId);
+
+    // Log headers to identify client patterns
+    const userAgent = req.headers['user-agent'] || '';
+    const referer = req.headers['referer'] || '';
+    const origin = req.headers['origin'] || '';
+    Logger.balanceClient(false, userAgent, correlationId, { origin, referer });
+
+    // Only process POST requests with valid bodies
+    if (req.method !== 'POST' || !req.body) {
+      Logger.balanceDebug(`SKIPPING: Not POST or no body - method:${req.method} body:${!!req.body}`, correlationId);
+      return next();
+    }
+
+    try {
+      // Parse the chat completion request
+      const chatRequest = req.body as ChatCompletionRequest;
+      Logger.balanceDebug(`PARSED REQUEST: messages:${chatRequest?.messages?.length || 0}`, correlationId);
+
+      // Check if this request is from ChatWise client
+      const isChatWise = balanceInjectionService.isChatWiseClient(req.headers);
+      Logger.balanceClient(isChatWise, userAgent, correlationId);
+
+      if (!isChatWise) {
+        Logger.balanceDebug('SKIPPING: Not a ChatWise client', correlationId);
+        return next();
+      }
+
+      // Check if this is a new session (single user message)
+      const isNewSession = balanceInjectionService.isNewSession(chatRequest);
+      Logger.balanceSession(isNewSession, chatRequest?.messages?.length || 0, correlationId);
+
+      if (!isNewSession) {
+        Logger.balanceDebug('SKIPPING: Not a new session', correlationId);
+        return next(); // Not a new session, continue normal processing
+      }
+
+      // Validate authorization for balance check
+      const authToken = AuthToken.fromRequest(req);
+      Logger.balanceAuth(!!authToken, authToken?.isValid || false, correlationId);
+
+      if (!authToken || !authToken.isValid) {
+        Logger.balanceDebug('AUTH FAILED: Passing to main handler', correlationId);
+        return next(); // Let the main handler deal with auth errors
+      }
+
+      // Only inject balance for streaming requests (for now)
+      Logger.balanceStream(!!chatRequest.stream, correlationId);
+      if (!chatRequest.stream) {
+        Logger.balanceDebug('NON-STREAMING: Skipping balance injection', correlationId);
+        return next(); // Skip non-streaming requests for this prototype
+      }
+
+      Logger.balanceInfo('Starting balance injection for new session', correlationId);
+
+      console.log(`[${correlationId}] ========================================`);
+      console.log(`[${correlationId}] NEW CHAT SESSION DETECTED - INJECTING BALANCE`);
+      console.log(`[${correlationId}] ========================================`);
+
+      // Get user's balance
+      Logger.balanceDebug('Fetching user balance...', correlationId);
+      const balance = await balanceInjectionService.getUserBalance(
+        authToken,
+        correlationId
+      );
+
+      Logger.balanceDebug(`Balance fetch result: ${balance ? 'SUCCESS' : 'FAILED'}`, correlationId);
+
+      if (!balance) {
+        Logger.balanceError('Balance fetch failed, continuing to main handler', correlationId);
+        console.log(`[${correlationId}] Failed to fetch balance, skipping injection`);
+        return next(); // Continue without balance if we can't fetch it
+      }
+
+      // Create balance text to prepend to first LLM response
+      const balanceText = balance.totalCredits === -1
+        ? `💰 Account: Unlimited credits (${balance.usedCredits} used)\n\n`
+        : `💰 Balance: ${balance.totalCredits} credits remaining (${balance.usedCredits} used)\n\n`;
+
+      Logger.balanceInfo('Setting up streaming with balance injection', correlationId);
+
+      try {
+        // Set up proper SSE streaming response
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+
+        // Generate unique chat ID
+        const chatId = balanceInjectionService.generateChatId();
+        Logger.balanceDebug(`Generated chat ID: ${chatId}`, correlationId);
+
+        // Create request for LLM chat completion immediately
+        Logger.balanceDebug('Creating OpenRouter request...', correlationId);
+
+        // Map ChatWise path to OpenRouter path
+        const openRouterPath = req.originalUrl.startsWith('/v1/')
+          ? `/api${req.originalUrl}`
+          : req.originalUrl;
+
+        fs.appendFileSync('/tmp/proxy.log', `🛤️ PATH MAPPING: ${req.originalUrl} -> ${openRouterPath}\n`);
+
+        const openRouterRequest = OpenRouterRequest.fromProxyRequest(
+          {
+            method: 'POST',
+            path: openRouterPath,
+            headers: req.headers as Record<string, string>,
+            body: chatRequest,
+            query: req.query as Record<string, string>,
+          },
+          OPENROUTER_BASE_URL,
+          REQUEST_TIMEOUT_MS
+        ).withCorrelationId(correlationId);
+        fs.appendFileSync('/tmp/proxy.log', `✅ OPENROUTER REQUEST CREATED\n`);
+
+        // Make streaming request to OpenRouter
+        const axios = require('axios');
+        const https = require('https');
+
+        const axiosConfig = {
+          method: openRouterRequest.method,
+          url: openRouterRequest.url,
+          headers: openRouterRequest.headers,
+          data: openRouterRequest.body,
+          timeout: openRouterRequest.timeout,
+          responseType: 'stream' as const,
+          httpsAgent: new https.Agent({
+            keepAlive: true,
+            timeout: 60000,
+            rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+          }),
+        };
+
+        fs.appendFileSync('/tmp/proxy.log', `🌐 MAKING AXIOS REQUEST...\n`);
+        const response = await axios(axiosConfig);
+        fs.appendFileSync('/tmp/proxy.log', `✅ AXIOS RESPONSE RECEIVED\n`);
+
+        if (response.status !== 200) {
+          fs.appendFileSync('/tmp/proxy.log', `❌ NON-200 STATUS: ${response.status}\n`);
+          console.error(`[${correlationId}] ERROR: Non-200 status code: ${response.status}`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+
+        fs.appendFileSync('/tmp/proxy.log', `✅ STATUS 200 - STARTING STREAM RELAY\n`);
+        console.log(`[${correlationId}] Relaying OpenRouter stream with balance injection...`);
+
+        let isFirstContentChunk = true;
+        let chunkBuffer = '';
+
+        // Parse and relay OpenRouter's SSE stream with balance injection
+        response.data.on('data', (chunk: Buffer) => {
+          fs.appendFileSync('/tmp/proxy.log', `📦 RECEIVED CHUNK\n`);
+          const chunkStr = chunk.toString();
+          console.log(`[${correlationId}] OpenRouter chunk: ${chunkStr.substring(0, 100)}...`);
+          chunkBuffer += chunkStr;
+
+          // Process complete SSE events (lines ending with \n\n)
+          const events = chunkBuffer.split('\n\n');
+          // Keep the last incomplete event in buffer
+          chunkBuffer = events.pop() || '';
+
+          for (const event of events) {
+            if (!event.trim()) continue;
+
+            fs.appendFileSync('/tmp/proxy.log', `🔍 CHECKING EVENT: ${event.substring(0, 200)}\n`);
+
+            let modifiedEvent = event;
+
+            // Replace chat IDs to maintain consistency
+            modifiedEvent = modifiedEvent.replace(
+              /"id":"[^"]+"/g,
+              `"id":"${chatId}"`
+            );
+
+            // Inject balance into the first content chunk
+            if (isFirstContentChunk && event.startsWith('data: {')) {
+              try {
+                // Extract JSON from SSE event
+                const jsonStr = event.substring(6); // Remove "data: "
+                const jsonObj = JSON.parse(jsonStr);
+
+                if (jsonObj.choices && jsonObj.choices[0] && jsonObj.choices[0].delta && jsonObj.choices[0].delta.content && jsonObj.choices[0].delta.content.trim()) {
+                  fs.appendFileSync('/tmp/proxy.log', `🎯 FOUND CONTENT CHUNK - INJECTING BALANCE\n`);
+
+                  // Inject balance at the beginning of content
+                  jsonObj.choices[0].delta.content = balanceText + jsonObj.choices[0].delta.content;
+
+                  // Reconstruct the SSE event
+                  modifiedEvent = `data: ${JSON.stringify(jsonObj)}`;
+                  isFirstContentChunk = false;
+                  fs.appendFileSync('/tmp/proxy.log', `💰 BALANCE INJECTED INTO FIRST CHUNK\n`);
+                } else {
+                  fs.appendFileSync('/tmp/proxy.log', `⏭️ SKIPPING EVENT - NO CONTENT OR EMPTY\n`);
+                }
+              } catch (error) {
+                fs.appendFileSync('/tmp/proxy.log', `⚠️ INVALID JSON - SKIPPING INJECTION\n`);
+              }
+            }
+
+            res.write(modifiedEvent + '\n\n');
+            fs.appendFileSync('/tmp/proxy.log', `✅ EVENT RELAYED\n`);
+          }
+        });
+
+        response.data.on('end', () => {
+          fs.appendFileSync('/tmp/proxy.log', `🏁 STREAM ENDED\n`);
+          console.log(`[${correlationId}] OpenRouter stream ended`);
+          res.end();
+        });
+
+        response.data.on('error', (error: Error) => {
+          fs.appendFileSync('/tmp/proxy.log', `💥 STREAM ERROR: ${error}\n`);
+          console.error(`[${correlationId}] OpenRouter stream error:`, error);
+          res.write('data: [DONE]\n\n');
+          res.end();
+        });
+
+        fs.appendFileSync('/tmp/proxy.log', `✅ ALL HANDLERS SET UP\n`);
+
+      } catch (streamError) {
+        fs.appendFileSync('/tmp/proxy.log', `💥 STREAMING SETUP ERROR: ${streamError}\n`);
+        console.error(`[${correlationId}] Error setting up streaming:`, streamError);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+
+      return;
+
+    } catch (error) {
+      fs.appendFileSync('/tmp/proxy.log', `💥 BALANCE INJECTION ERROR: ${error}\n`);
+      console.error(`[${correlationId}] Balance injection error:`, error);
+      // Continue with normal processing if balance injection fails
+      return next();
+    }
+  });
+
+  // Proxy passthrough for all other /api/v1/* endpoints (using middleware approach for Express 5)
+  app.use('/api/v1', async (req, res, next) => {
+    // Skip if this is the credits endpoint (already handled above)
+    if (
+      (req.path === '/me/credits' || req.path === '/credits') &&
+      req.method === 'GET'
+    ) {
+      return next();
+    }
+
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Validate authorization early for security
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: authToken
+              ? 'Invalid API key format'
+              : 'Authorization header required',
+            correlationId,
+          },
+        };
+        res.status(401).json(errorResponse);
+        return;
+      }
+
+      // Create OpenRouter request - need to reconstruct full path
+      const fullPath = `/api/v1${req.path}`;
+      const openRouterRequest = OpenRouterRequest.fromProxyRequest(
+        {
+          method: req.method,
+          path: fullPath,
+          headers: req.headers as Record<string, string>,
+          body: req.body,
+          query: req.query as Record<string, string>,
+        },
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS
+      );
+
+      // Add correlation ID
+      const requestWithCorrelation =
+        openRouterRequest.withCorrelationId(correlationId);
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(
+        requestWithCorrelation
+      );
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        // For authentication errors (401), pass through original OpenRouter error structure
+        if (
+          proxyResponse.status === 401 &&
+          proxyResponse.data &&
+          typeof proxyResponse.data === 'object' &&
+          'error' in proxyResponse.data
+        ) {
+          res.set('x-correlation-id', correlationId);
+          res.status(401).json(proxyResponse.data);
+          return;
+        }
+
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = {
+          error: {
+            code: errorCode,
+            message:
+              typeof proxyResponse.data === 'object' &&
+              proxyResponse.data &&
+              'error' in proxyResponse.data
+                ? (proxyResponse.data as { error: { message?: string } }).error
+                    .message || 'OpenRouter API error'
+                : 'OpenRouter API error',
+            correlationId,
+          },
+        };
+
+        res.status(statusCode).json(errorResponse);
+        return;
+      }
+
+      // Forward successful response exactly as received
+      const responseHeaders = { ...proxyResponse.headers };
+      delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
+
+      res.status(proxyResponse.status).set(responseHeaders);
+
+      if (proxyResponse.data !== undefined) {
+        res.json(proxyResponse.data);
+      } else {
+        res.end();
+      }
+    } catch (error) {
+      const errorResponse = {
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'OpenRouter API unavailable',
+          correlationId,
+        },
+      };
+      res.status(502).json(errorResponse);
+    }
+  });
+
+  // Special handling for /v1/credits endpoint (transform using auth/key data)
+  app.get('/v1/credits', async (req, res) => {
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Validate authorization
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = CreditResponse.createErrorResponse(
+          'UNAUTHORIZED',
+          authToken
+            ? 'Invalid API key format'
+            : 'Authorization header required',
+          401,
+          correlationId
+        );
+        return res
+          .status(errorResponse.status)
+          .set(errorResponse.headers)
+          .json(errorResponse.body);
+      }
+
+      // Create request to OpenRouter /api/v1/auth/key endpoint
+      const keyRequest = OpenRouterRequest.createKeyRequest(
+        authToken.getAuthorizationHeader(),
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS,
+        correlationId
+      );
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(keyRequest);
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        let errorCode = 'UPSTREAM_ERROR';
+        const statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        }
+
+        const errorResponse = CreditResponse.createErrorResponse(
+          errorCode,
+          typeof proxyResponse.data === 'object' &&
+            proxyResponse.data &&
+            'error' in proxyResponse.data
+            ? (proxyResponse.data as { error: { message?: string } }).error
+                .message || 'OpenRouter API error'
+            : 'OpenRouter API unavailable',
+          statusCode,
+          correlationId
+        );
+
+        if (
+          proxyResponse.status === 429 &&
+          proxyResponse.headers['retry-after']
+        ) {
+          errorResponse.headers['Retry-After'] =
+            proxyResponse.headers['retry-after'];
+        }
+
+        return res
+          .status(errorResponse.status)
+          .set(errorResponse.headers)
+          .json(errorResponse.body);
+      }
+
+      // Transform auth/key response to credits API format as per OpenRouter docs
+      // https://openrouter.ai/docs/api-reference/get-credits
+      const openRouterResponse = proxyResponse.data as { data?: unknown };
+      const keyData = openRouterResponse.data;
+
+      const validatedData = CreditResponse.validateKeyResponseData(keyData);
+      const creditResponse = CreditResponse.fromKeyResponse(
+        validatedData,
+        correlationId,
+        proxyResponse.headers
+      );
+      const response = creditResponse
+        .withCacheHeaders('MISS')
+        .toExpressResponse();
+
+      // Bypass all middleware and send raw response to match OpenRouter exactly
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(response.body));
+      return;
+    } catch (error) {
+      const errorResponse = CreditResponse.createErrorResponse(
+        'INTERNAL_ERROR',
+        error instanceof Error ? error.message : 'Internal server error',
+        500,
+        correlationId
+      );
+      return res
+        .status(errorResponse.status)
+        .set(errorResponse.headers)
+        .json(errorResponse.body);
+    }
+  });
+
+  // Special handling for /v1/models endpoint (MUST come before general /v1 middleware)
+  app.get('/v1/models', async (req, res) => {
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Validate authorization early for security
+      const authToken = AuthToken.fromRequest(req);
+      if (!authToken || !authToken.isValid) {
+        const errorResponse = {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: authToken
+              ? 'Invalid API key format'
+              : 'Authorization header required',
+            correlationId,
+          },
+        };
+        res.status(401).json(errorResponse);
+        return;
+      }
+
+      // Create OpenRouter request - need to reconstruct full path with /api prefix
+      const fullPath = req.path.replace('/v1', '/api/v1');
+
+      const openRouterRequest = OpenRouterRequest.fromProxyRequest(
+        {
+          method: req.method,
+          path: fullPath,
+          headers: req.headers as Record<string, string>,
+          body: req.body,
+          query: req.query as Record<string, string>,
+        },
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS
+      );
+
+      // Add correlation ID
+      const requestWithCorrelation =
+        openRouterRequest.withCorrelationId(correlationId);
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(
+        requestWithCorrelation
+      );
+
+      // Check if we got blocked by Cloudflare (HTML response instead of JSON)
+      if (
+        typeof proxyResponse.data === 'string' &&
+        proxyResponse.data.includes('<!DOCTYPE html>') &&
+        proxyResponse.data.includes('Cloudflare')
+      ) {
+        // If we have a real API key for testing, don't use mock - return the actual error
+        const authHeader = req.headers.authorization as string;
+        if (
+          authHeader &&
+          authHeader.includes('sk-or-v1-') &&
+          process.env.OPENROUTER_TEST_API_KEY
+        ) {
+          console.log(
+            `[${correlationId}] Cloudflare blocked real API key - returning 502 error`
+          );
+
+          const errorResponse = {
+            error: {
+              code: 'UPSTREAM_ERROR',
+              message:
+                'OpenRouter API blocked by Cloudflare - check network configuration',
+              correlationId,
+            },
+          };
+          res.writeHead(502, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'X-Correlation-Id': correlationId,
+          });
+          res.end(JSON.stringify(errorResponse));
+          return;
+        }
+
+        // In local development, return a mock models response to avoid Cloudflare blocking
+        console.log(
+          `[${correlationId}] Cloudflare blocked - returning mock models response for local dev`
+        );
+
+        const mockModelsResponse = {
+          data: [
+            {
+              id: 'gpt-3.5-turbo',
+              name: 'GPT-3.5 Turbo',
+              pricing: { prompt: '0.0015', completion: '0.002' },
+            },
+            {
+              id: 'gpt-4',
+              name: 'GPT-4',
+              pricing: { prompt: '0.03', completion: '0.06' },
+            },
+            {
+              id: 'claude-3-haiku',
+              name: 'Claude 3 Haiku',
+              pricing: { prompt: '0.00025', completion: '0.00125' },
+            },
+            {
+              id: 'google/gemini-2.5-flash',
+              name: 'Gemini 2.5 Flash',
+              pricing: { prompt: '0.00075', completion: '0.003' },
+            },
+          ],
+        };
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+        res.end(JSON.stringify(mockModelsResponse));
+        return;
+      }
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        // For authentication errors (401), pass through original OpenRouter error structure
+        if (
+          proxyResponse.status === 401 &&
+          proxyResponse.data &&
+          typeof proxyResponse.data === 'object' &&
+          'error' in proxyResponse.data
+        ) {
+          res.writeHead(401, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'X-Correlation-Id': correlationId,
+          });
+          res.end(JSON.stringify(proxyResponse.data));
+          return;
+        }
+
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = {
+          error: {
+            code: errorCode,
+            message:
+              typeof proxyResponse.data === 'object' &&
+              proxyResponse.data &&
+              'error' in proxyResponse.data
+                ? (proxyResponse.data as { error: { message?: string } }).error
+                    .message || 'OpenRouter API error'
+                : 'OpenRouter API error',
+            correlationId,
+          },
+        };
+
+        res.writeHead(statusCode, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+        res.end(JSON.stringify(errorResponse));
+        return;
+      }
+
+      // Send clean response with headers matching OpenRouter exactly
+      res.writeHead(proxyResponse.status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(proxyResponse.data));
+      return;
+    } catch (error) {
+      const errorResponse = {
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'OpenRouter API unavailable',
+          correlationId,
+        },
+      };
+      res.writeHead(502, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(errorResponse));
+    }
+  });
+
+  // Special handling for /v1/auth/key endpoint (MUST come before general /v1 middleware)
+  app.get('/v1/auth/key', async (req, res) => {
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Create OpenRouter request - need to reconstruct full path with /api prefix
+      // req.path for /v1/auth/key is "/v1/auth/key", so we need to replace /v1 with /api/v1
+      const fullPath = req.path.replace('/v1', '/api/v1');
+
+      const openRouterRequest = OpenRouterRequest.fromProxyRequest(
+        {
+          method: req.method,
+          path: fullPath,
+          headers: req.headers as Record<string, string>,
+          body: req.body,
+          query: req.query as Record<string, string>,
+        },
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS
+      );
+
+      // Add correlation ID
+      const requestWithCorrelation =
+        openRouterRequest.withCorrelationId(correlationId);
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(
+        requestWithCorrelation
+      );
+
+      // Check if we got blocked by Cloudflare (HTML response instead of JSON)
+      if (
+        typeof proxyResponse.data === 'string' &&
+        proxyResponse.data.includes('<!DOCTYPE html>') &&
+        proxyResponse.data.includes('Cloudflare')
+      ) {
+        // If we have a real API key for testing, don't use mock - return the actual error
+        const authHeader = req.headers.authorization as string;
+        if (
+          authHeader &&
+          authHeader.includes('sk-or-v1-') &&
+          process.env.OPENROUTER_TEST_API_KEY
+        ) {
+          console.log(
+            `[${correlationId}] Cloudflare blocked real API key - returning 502 error`
+          );
+
+          const errorResponse = {
+            error: {
+              code: 'UPSTREAM_ERROR',
+              message:
+                'OpenRouter API blocked by Cloudflare - check network configuration',
+              correlationId,
+            },
+          };
+          res.writeHead(502, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'X-Correlation-Id': correlationId,
+          });
+          res.end(JSON.stringify(errorResponse));
+          return;
+        }
+
+        // In local development, return a mock auth/key response to avoid Cloudflare blocking
+        console.log(
+          `[${correlationId}] Cloudflare blocked - returning mock auth/key response for local dev`
+        );
+
+        const mockAuthResponse = {
+          data: {
+            name: 'Local Development Mock',
+            models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-haiku'],
+            api_key:
+              req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
+            monthly_limit: 100000,
+            usage: 0,
+            is_valid: true,
+          },
+        };
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+        res.end(JSON.stringify(mockAuthResponse));
+        return;
+      }
+
+      // Send clean response with headers matching OpenRouter exactly
+      res.writeHead(proxyResponse.status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(proxyResponse.data));
+      return;
+    } catch (error) {
+      const errorResponse = {
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'OpenRouter API unavailable',
+          correlationId,
+        },
+      };
+      res.writeHead(502, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Correlation-Id': correlationId,
+      });
+      res.end(JSON.stringify(errorResponse));
+    }
+  });
+
+  // Proxy passthrough for /v1/* endpoints (for chat applications that use the shorter path)
+  app.use('/v1', async (req, res, next) => {
+    // Skip if this is the credits endpoint (already handled above)
+    // Note: /v1/auth/key is now handled by specific route above
+    if (req.path === '/credits' && req.method === 'GET') {
+      return next();
+    }
+
+    const correlationId = req.correlationId as string;
+
+    try {
+      // Check if this is a streaming request
+      const isStreamingRequest = req.body && req.body.stream === true;
+
+      if (isStreamingRequest) {
+        // For streaming requests, use direct HTTP proxy to maintain stream
+        const targetUrl = `${OPENROUTER_BASE_URL}/api/v1${req.path}`;
+        const proxyHeaders = { ...req.headers };
+        proxyHeaders['host'] = new URL(OPENROUTER_BASE_URL).host;
+        delete proxyHeaders['content-length']; // Let the proxy recalculate
+
+        const https = require('https');
+        const url = require('url');
+
+        const targetOptions = url.parse(targetUrl);
+        targetOptions.method = req.method;
+        targetOptions.headers = proxyHeaders;
+
+        const proxyReq = https.request(
+          targetOptions,
+          (proxyRes: import('http').IncomingMessage) => {
+            // Forward status and headers
+            res.status(proxyRes.statusCode || 500);
+
+            // Forward headers but clean them up
+            const responseHeaders = { ...proxyRes.headers };
+            delete responseHeaders['transfer-encoding'];
+            res.set(responseHeaders);
+
+            // Pipe the streaming response directly
+            proxyRes.pipe(res);
+          }
+        );
+
+        proxyReq.on('error', (error: Error) => {
+          console.error(`[${correlationId}] Streaming proxy error:`, error);
+          if (!res.headersSent) {
+            res.status(502).json({
+              error: {
+                code: 'UPSTREAM_ERROR',
+                message: 'Failed to connect to OpenRouter API',
+                correlationId,
+              },
+            });
+          }
+        });
+
+        // Forward the request body for POST requests
+        if (req.method === 'POST' && req.body) {
+          proxyReq.write(JSON.stringify(req.body));
+        }
+
+        proxyReq.end();
+        return;
+      }
+
+      // For non-streaming requests, use the existing ProxyService
+      const fullPath = `/api/v1${req.path}`;
+      const openRouterRequest = OpenRouterRequest.fromProxyRequest(
+        {
+          method: req.method,
+          path: fullPath,
+          headers: req.headers as Record<string, string>,
+          body: req.body,
+          query: req.query as Record<string, string>,
+        },
+        OPENROUTER_BASE_URL,
+        REQUEST_TIMEOUT_MS
+      );
+
+      // Add correlation ID
+      const requestWithCorrelation =
+        openRouterRequest.withCorrelationId(correlationId);
+
+      // Make request to OpenRouter
+      const proxyResponse = await proxyService.makeRequest(
+        requestWithCorrelation
+      );
+
+      // Check if we got blocked by Cloudflare (HTML response instead of JSON)
+      if (
+        typeof proxyResponse.data === 'string' &&
+        proxyResponse.data.includes('<!DOCTYPE html>') &&
+        proxyResponse.data.includes('Cloudflare')
+      ) {
+        // If we have a real API key for testing, don't use mock - return the actual error
+        const authHeader = req.headers.authorization as string;
+        if (
+          authHeader &&
+          authHeader.includes('sk-or-v1-') &&
+          process.env.OPENROUTER_TEST_API_KEY
+        ) {
+          console.log(
+            `[${correlationId}] Cloudflare blocked real API key on ${req.path} - returning 502 error`
+          );
+
+          const errorResponse = {
+            error: {
+              code: 'UPSTREAM_ERROR',
+              message:
+                'OpenRouter API blocked by Cloudflare - check network configuration',
+              correlationId,
+            },
+          };
+          res.status(502).json(errorResponse);
+          return;
+        }
+
+        // Return appropriate mock response based on the endpoint
+        if (req.path === '/models') {
+          console.log(
+            `[${correlationId}] Cloudflare blocked - returning mock models response for local dev`
+          );
+
+          const mockModelsResponse = {
+            data: [
+              {
+                id: 'gpt-3.5-turbo',
+                name: 'GPT-3.5 Turbo',
+                pricing: { prompt: '0.0015', completion: '0.002' },
+              },
+              {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                pricing: { prompt: '0.03', completion: '0.06' },
+              },
+              {
+                id: 'claude-3-haiku',
+                name: 'Claude 3 Haiku',
+                pricing: { prompt: '0.00025', completion: '0.00125' },
+              },
+              {
+                id: 'google/gemini-2.5-flash',
+                name: 'Gemini 2.5 Flash',
+                pricing: { prompt: '0.00075', completion: '0.003' },
+              },
+            ],
+          };
+
+          res.status(200).set({
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'X-Correlation-Id': correlationId,
+          });
+          res.json(mockModelsResponse);
+          return;
+        }
+
+        // For other endpoints, log and continue with original error handling
+        console.log(
+          `[${correlationId}] Cloudflare blocked endpoint: ${req.path}`
+        );
+      }
+
+      // For /v1/chat/completions, use clean headers to match OpenRouter exactly
+      if (req.path === '/chat/completions') {
+        res.writeHead(proxyResponse.status, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Correlation-Id': correlationId,
+        });
+        if (proxyResponse.data !== undefined) {
+          res.end(JSON.stringify(proxyResponse.data));
+        } else {
+          res.end();
+        }
+        return;
+      }
+
+      // Handle error responses
+      if (proxyResponse.status >= 400) {
+        let errorCode = 'UPSTREAM_ERROR';
+        let statusCode = proxyResponse.status; // Preserve original status code
+
+        if (proxyResponse.status === 400) {
+          errorCode = 'BAD_REQUEST';
+        } else if (proxyResponse.status === 401) {
+          errorCode = 'UNAUTHORIZED';
+        } else if (proxyResponse.status === 402) {
+          errorCode = 'INSUFFICIENT_CREDITS';
+        } else if (proxyResponse.status === 404) {
+          errorCode = 'NOT_FOUND';
+        } else if (proxyResponse.status === 408) {
+          errorCode = 'REQUEST_TIMEOUT';
+        } else if (proxyResponse.status === 429) {
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+        } else if (proxyResponse.status >= 500) {
+          // Map 5xx server errors to 502 for consistency
+          statusCode = 502;
+        }
+
+        const errorResponse = {
+          error: {
+            code: errorCode,
+            message:
+              typeof proxyResponse.data === 'object' &&
+              proxyResponse.data &&
+              'error' in proxyResponse.data
+                ? (proxyResponse.data as { error: { message?: string } }).error
+                    .message || 'OpenRouter API error'
+                : 'OpenRouter API error',
+            correlationId,
+          },
+        };
+
+        res.status(statusCode).json(errorResponse);
+        return;
+      }
+
+      // Forward successful response exactly as received
+      const responseHeaders = { ...proxyResponse.headers };
+      delete responseHeaders['transfer-encoding']; // Remove transfer-encoding to avoid conflicts
+
+      res.status(proxyResponse.status).set(responseHeaders);
+
+      if (proxyResponse.data !== undefined) {
+        res.json(proxyResponse.data);
+      } else {
+        res.end();
+      }
+    } catch (error) {
+      const errorResponse = {
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'OpenRouter API unavailable',
+          correlationId,
+        },
+      };
+      res.status(502).json(errorResponse);
+    }
+  });
+
+  // 404 handler for non-API routes (using middleware approach for Express 5)
+  app.use((req, res) => {
+    const correlationId = req.correlationId as string;
+    res.status(404).json({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Endpoint not found',
+        correlationId,
+      },
+    });
+  });
+
+  // Error handler
+  app.use(
+    (
+      error: Error,
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction
+    ) => {
+      const correlationId = req.correlationId || uuidv4();
+
+      // Log the error for debugging
+      console.error('Unhandled error:', error.message, { correlationId });
+
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          correlationId,
+        },
+      });
+    }
+  );
+
+  return app;
+}
+
+// Start server if this file is run directly
+if (require.main === module) {
+  const app = createApp();
+
+  app.listen(PORT, () => {
+    console.log(`OpenRouter Proxy Server listening on port ${PORT}`);
+
+    console.log(`Proxying to: ${OPENROUTER_BASE_URL}`);
+  });
+}
+
+// Export for testing
+export { createApp as default };
+
+// Extend Express Request type
+declare module 'express-serve-static-core' {
+  interface Request {
+    correlationId?: string;
+  }
+}

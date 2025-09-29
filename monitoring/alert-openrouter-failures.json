@@ -1,0 +1,28 @@
+{
+  "displayName": "OpenRouter API Failures",
+  "documentation": {
+    "content": "Alert when the OpenRouter proxy detects failures communicating with the OpenRouter API. This could indicate OpenRouter service issues or network problems."
+  },
+  "conditions": [
+    {
+      "displayName": "OpenRouter API failure condition",
+      "conditionThreshold": {
+        "filter": "resource.type=\"logging_metric\" AND metric.type=\"logging.googleapis.com/user/openrouter_api_failures\"",
+        "comparison": "GREATER_THAN",
+        "thresholdValue": 3,
+        "duration": "120s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "notificationChannels": [
+    "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
+  ],
+  "enabled": true
+}

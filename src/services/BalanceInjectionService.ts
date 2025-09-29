@@ -179,11 +179,10 @@ export class BalanceInjectionService {
   }
 
   /**
-   * Converts credits to dollars (1 credit = $0.001 USD)
+   * Converts credits to dollars (1 credit = $1 USD)
    */
   private creditsToDollars(credits: number): string {
-    const dollars = credits * 0.001;
-    return dollars.toFixed(2);
+    return credits.toFixed(2);
   }
 
   /**

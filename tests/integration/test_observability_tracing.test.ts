@@ -29,19 +29,16 @@ import { Express } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { createApp } from '../../src/app';
 
-describe('Observability Tracing Integration Tests', () => {
+(process.env.OPENROUTER_TEST_API_KEY ? describe : describe.skip)('Observability Tracing Integration Tests', () => {
   let app: Express;
   const TEST_API_KEY = process.env.OPENROUTER_TEST_API_KEY;
   const WEAVE_ENABLED = !!process.env.WEAVE_PROJECT_NAME;
   const LANGFUSE_ENABLED = !!process.env.LANGFUSE_PUBLIC_KEY;
 
   beforeAll(async () => {
-    if (!TEST_API_KEY) {
-      throw new Error(
-        'OPENROUTER_TEST_API_KEY is required for observability tests'
-      );
+    if (TEST_API_KEY) {
+      app = await createApp();
     }
-    app = await createApp();
   });
 
   afterAll(async () => {

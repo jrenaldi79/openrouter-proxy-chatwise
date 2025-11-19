@@ -5,8 +5,8 @@ import { createApp } from '../../src/app';
 describe('Real API Performance Tests', () => {
   let app: Express;
 
-  beforeAll(() => {
-    app = createApp();
+  beforeAll(async () => {
+    app = await createApp();
   });
 
   // Only run these tests if we have a real API key

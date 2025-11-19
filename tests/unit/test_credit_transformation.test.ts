@@ -6,8 +6,8 @@ import { createApp } from '../../src/app';
 describe('Credit Transformation Contract Tests', () => {
   let app: Express;
 
-  beforeAll(() => {
-    app = createApp();
+  beforeAll(async () => {
+    app = await createApp();
   });
 
   beforeEach(() => {

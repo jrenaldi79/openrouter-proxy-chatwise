@@ -6,8 +6,8 @@ import { createApp } from '../../src/app';
 describe('Middleware Chain Integration Tests', () => {
   let app: Express;
 
-  beforeAll(() => {
-    app = createApp();
+  beforeAll(async () => {
+    app = await createApp();
   });
 
   beforeEach(() => {

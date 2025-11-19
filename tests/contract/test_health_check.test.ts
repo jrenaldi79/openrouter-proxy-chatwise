@@ -5,8 +5,8 @@ import { createApp } from '../../src/app';
 describe('Health Check Contract Tests', () => {
   let app: Express;
 
-  beforeAll(() => {
-    app = createApp();
+  beforeAll(async () => {
+    app = await createApp();
   });
 
   describe('GET /health', () => {

@@ -82,20 +82,14 @@ export async function balanceInjectionMiddleware(
     Logger.balanceAuth(!!authToken, authToken?.isValid || false, correlationId);
 
     if (!authToken || !authToken.isValid) {
-      Logger.info(
-        'AUTH FAILED: Passing to main handler',
-        correlationId
-      );
+      Logger.info('AUTH FAILED: Passing to main handler', correlationId);
       return next(); // Let the main handler deal with auth errors
     }
 
     // Only inject balance for streaming requests (for now)
     Logger.balanceStream(!!chatRequest.stream, correlationId);
     if (!chatRequest.stream) {
-      Logger.info(
-        'NON-STREAMING: Skipping balance injection',
-        correlationId
-      );
+      Logger.info('NON-STREAMING: Skipping balance injection', correlationId);
       return next(); // Skip non-streaming requests for this prototype
     }
 
@@ -221,7 +215,8 @@ export async function balanceInjectionMiddleware(
       const hasWeaveData = (req as any).__weaveRequestData;
       const hasLangfuseData = (req as any).__langfuseRequestData;
       const needsTracing =
-        (isWeaveEnabled() && hasWeaveData) || (isLangfuseEnabled() && hasLangfuseData);
+        (isWeaveEnabled() && hasWeaveData) ||
+        (isLangfuseEnabled() && hasLangfuseData);
 
       // Buffer for tracing (separate from chunkBuffer for SSE parsing)
       let tracingBuffer = needsTracing ? '' : null;
@@ -286,10 +281,7 @@ export async function balanceInjectionMiddleware(
                 // Reconstruct the SSE event
                 modifiedEvent = `data: ${JSON.stringify(jsonObj)}`;
                 isFirstContentChunk = false;
-                Logger.info(
-                  'Balance injected into first chunk',
-                  correlationId
-                );
+                Logger.info('Balance injected into first chunk', correlationId);
               } else {
                 Logger.info(
                   'Skipping event - no content or empty',
@@ -297,13 +289,9 @@ export async function balanceInjectionMiddleware(
                 );
               }
             } catch (error) {
-              Logger.error(
-                'Invalid JSON - skipping injection',
-                correlationId,
-                {
-                  error: error instanceof Error ? error.message : String(error),
-                }
-              );
+              Logger.error('Invalid JSON - skipping injection', correlationId, {
+                error: error instanceof Error ? error.message : String(error),
+              });
             }
           }
 
@@ -321,7 +309,7 @@ export async function balanceInjectionMiddleware(
           Logger.info('Stream completed, starting async trace', correlationId);
 
           // Fire-and-forget async tracing
-          (async () => {
+          void (async (): Promise<void> => {
             try {
               const accumulatedResponse = parseAndAccumulateSSE(
                 tracingBuffer!,
@@ -335,8 +323,12 @@ export async function balanceInjectionMiddleware(
                 max_tokens: chatRequest.max_tokens,
                 top_p: chatRequest.top_p as number | undefined,
                 n: chatRequest.n as number | undefined,
-                presence_penalty: chatRequest.presence_penalty as number | undefined,
-                frequency_penalty: chatRequest.frequency_penalty as number | undefined,
+                presence_penalty: chatRequest.presence_penalty as
+                  | number
+                  | undefined,
+                frequency_penalty: chatRequest.frequency_penalty as
+                  | number
+                  | undefined,
               };
 
               await traceStreamingCompletion(
@@ -347,9 +339,13 @@ export async function balanceInjectionMiddleware(
                 hasLangfuseData
               );
             } catch (error) {
-              Logger.error('Async streaming trace failed (balance injection)', correlationId, {
-                error: error instanceof Error ? error.message : String(error),
-              });
+              Logger.error(
+                'Async streaming trace failed (balance injection)',
+                correlationId,
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                }
+              );
             }
           })();
         }

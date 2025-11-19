@@ -1,12 +1,20 @@
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Express } from 'express';
 
 // Configuration
 import { envConfig } from './config/environment';
+import { initializeWeave } from './config/weave';
+import { initializeLangfuse } from './config/langfuse';
 
 // Middleware
 import { applySecurity } from './middleware/security';
 import { applyBodyParsing } from './middleware/parsing';
 import { correlationMiddleware } from './middleware/correlation';
+import { weaveTracingMiddleware } from './middleware/weave-tracing';
+import { langfuseTracingMiddleware } from './middleware/langfuse-tracing';
 import { balanceInjectionMiddleware } from './middleware/balance-injection';
 import { notFoundHandler, errorHandler } from './middleware/error-handling';
 
@@ -23,8 +31,12 @@ import { v1ModelsHandler } from './routes/proxy-v1-models';
 import { v1AuthKeyHandler } from './routes/proxy-v1-auth';
 import { v1ProxyHandler } from './routes/proxy-v1-general';
 
-export function createApp(): Express {
+export async function createApp(): Promise<Express> {
   const app = express();
+
+  // Initialize observability platforms (if configured)
+  await initializeWeave();
+  await initializeLangfuse();
 
   // Apply security middleware (helmet, cors, rate limiting, trust proxy)
   applySecurity(app);
@@ -45,6 +57,14 @@ export function createApp(): Express {
   app.get('/api/v1/me/credits', meCreditsHandler);
   app.get('/api/v1/credits', apiCreditsHandler);
   app.get('/v1/credits', v1CreditsHandler);
+
+  // Observability tracing middleware for chat completions only (LLM observability)
+  // Both Weave and Langfuse can run simultaneously when enabled
+  app.use(
+    ['/api/v1/chat/completions', '/v1/chat/completions'],
+    weaveTracingMiddleware,
+    langfuseTracingMiddleware
+  );
 
   // Balance injection middleware for new chat sessions
   app.use(
@@ -75,11 +95,13 @@ export function createApp(): Express {
 
 // Start server if this file is run directly
 if (require.main === module) {
-  const app = createApp();
-
-  app.listen(envConfig.PORT, () => {
-    console.log(`OpenRouter Proxy Server listening on port ${envConfig.PORT}`);
-    console.log(`Proxying to: ${envConfig.OPENROUTER_BASE_URL}`);
+  void createApp().then(app => {
+    app.listen(envConfig.PORT, () => {
+      console.log(
+        `OpenRouter Proxy Server listening on port ${envConfig.PORT}`
+      );
+      console.log(`Proxying to: ${envConfig.OPENROUTER_BASE_URL}`);
+    });
   });
 }
 

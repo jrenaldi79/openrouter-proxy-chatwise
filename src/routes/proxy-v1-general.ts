@@ -75,12 +75,22 @@ function handleStreamingRequest(
         // Create traces if needed
         if (shouldTrace && streamBuffer) {
           try {
-            const { parseAndAccumulateSSE } = await import('../utils/sse-parser');
-            const { traceStreamingCompletion } = await import('../utils/async-tracer');
+            const { parseAndAccumulateSSE } = await import(
+              '../utils/sse-parser'
+            );
+            const { traceStreamingCompletion } = await import(
+              '../utils/async-tracer'
+            );
 
-            Logger.info('Stream completed, starting async trace', correlationId);
+            Logger.info(
+              'Stream completed, starting async trace',
+              correlationId
+            );
 
-            const accumulatedResponse = parseAndAccumulateSSE(streamBuffer, correlationId);
+            const accumulatedResponse = parseAndAccumulateSSE(
+              streamBuffer,
+              correlationId
+            );
 
             const chatRequest = req.body as {
               model: string;
@@ -186,10 +196,10 @@ export async function v1ProxyHandler(
     const isChatCompletion = req.path === '/chat/completions';
     const hasWeaveData = (req as any).__weaveRequestData;
     const hasLangfuseData = (req as any).__langfuseRequestData;
-    const needsTracing = isChatCompletion && (
-      (isWeaveEnabled() && hasWeaveData) ||
-      (isLangfuseEnabled() && hasLangfuseData)
-    );
+    const needsTracing =
+      isChatCompletion &&
+      ((isWeaveEnabled() && hasWeaveData) ||
+        (isLangfuseEnabled() && hasLangfuseData));
 
     if (needsTracing) {
       const requestBody = req.body;
@@ -208,10 +218,15 @@ export async function v1ProxyHandler(
       };
 
       // Execute tracing based on which platforms are enabled
-      if (isWeaveEnabled() && hasWeaveData && isLangfuseEnabled() && hasLangfuseData) {
+      if (
+        isWeaveEnabled() &&
+        hasWeaveData &&
+        isLangfuseEnabled() &&
+        hasLangfuseData
+      ) {
         // Both platforms enabled - trace in parallel
         const weaveTracedCall = createTracedLLMCall(
-          (request) => proxyService.makeRequest(request),
+          request => proxyService.makeRequest(request),
           openRouterRequest
         );
 
@@ -223,10 +238,14 @@ export async function v1ProxyHandler(
           async () => ({ status: 200, headers: {}, data: llmResponse }),
           openRouterRequest,
           llmInput
-        )().catch((error) => {
-          Logger.error('Langfuse tracing failed (non-blocking)', correlationId, {
-            error: error instanceof Error ? error.message : String(error),
-          });
+        )().catch(error => {
+          Logger.error(
+            'Langfuse tracing failed (non-blocking)',
+            correlationId,
+            {
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
         });
 
         proxyResponse = {
@@ -241,7 +260,7 @@ export async function v1ProxyHandler(
       } else if (isWeaveEnabled() && hasWeaveData) {
         // Only Weave enabled
         const tracedCall = createTracedLLMCall(
-          (request) => proxyService.makeRequest(request),
+          request => proxyService.makeRequest(request),
           openRouterRequest
         );
 
@@ -259,7 +278,7 @@ export async function v1ProxyHandler(
       } else if (isLangfuseEnabled() && hasLangfuseData) {
         // Only Langfuse enabled
         const tracedCall = createTracedLangfuseLLMCall(
-          (request) => proxyService.makeRequest(request),
+          request => proxyService.makeRequest(request),
           openRouterRequest,
           llmInput
         );
@@ -272,9 +291,13 @@ export async function v1ProxyHandler(
           data: llmResponse,
         };
 
-        Logger.info('Langfuse trace created for chat completion', correlationId, {
-          model: requestBody.model,
-        });
+        Logger.info(
+          'Langfuse trace created for chat completion',
+          correlationId,
+          {
+            model: requestBody.model,
+          }
+        );
       } else {
         // Fallback to non-traced call
         proxyResponse = await proxyService.makeRequest(openRouterRequest);

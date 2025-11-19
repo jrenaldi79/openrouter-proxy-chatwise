@@ -180,7 +180,7 @@ export async function balanceInjectionMiddleware(
         data: openRouterRequest.body,
         timeout: openRouterRequest.timeout,
         responseType: 'stream' as const,
-        validateStatus: () => true, // Don't throw on any status code
+        validateStatus: (): boolean => true, // Don't throw on any status code
         httpsAgent: new https.Agent({
           keepAlive: true,
           timeout: 60000,
@@ -211,24 +211,40 @@ export async function balanceInjectionMiddleware(
           try {
             // Try to parse as JSON error
             const errorJson = JSON.parse(errorData);
-            Logger.balanceError('Forwarding OpenRouter error', correlationId, undefined, { error: errorJson });
+            Logger.balanceError(
+              'Forwarding OpenRouter error',
+              correlationId,
+              undefined,
+              { error: errorJson }
+            );
 
             // Send error in SSE format
             res.write(`data: ${JSON.stringify(errorJson)}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
-          } catch (parseError) {
+          } catch {
             // If not JSON, send as text
-            Logger.balanceError('Error response not JSON, sending as text', correlationId);
-            res.write(`data: {"error": {"message": "${errorData.replace(/"/g, '\\"')}"}}\n\n`);
+            Logger.balanceError(
+              'Error response not JSON, sending as text',
+              correlationId
+            );
+            res.write(
+              `data: {"error": {"message": "${errorData.replace(/"/g, '\\"')}"}}\n\n`
+            );
             res.write('data: [DONE]\n\n');
             res.end();
           }
         });
 
         response.data.on('error', (streamError: Error) => {
-          Logger.balanceError('Error reading error stream', correlationId, streamError);
-          res.write('data: {"error": {"message": "Failed to read error from upstream"}}\n\n');
+          Logger.balanceError(
+            'Error reading error stream',
+            correlationId,
+            streamError
+          );
+          res.write(
+            'data: {"error": {"message": "Failed to read error from upstream"}}\n\n'
+          );
           res.write('data: [DONE]\n\n');
           res.end();
         });

@@ -120,7 +120,7 @@ async function balanceInjectionMiddleware(req, res, next) {
                         res.write('data: [DONE]\n\n');
                         res.end();
                     }
-                    catch (parseError) {
+                    catch {
                         logger_1.Logger.balanceError('Error response not JSON, sending as text', correlationId);
                         res.write(`data: {"error": {"message": "${errorData.replace(/"/g, '\\"')}"}}\n\n`);
                         res.write('data: [DONE]\n\n');

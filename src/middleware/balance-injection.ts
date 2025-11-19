@@ -180,6 +180,7 @@ export async function balanceInjectionMiddleware(
         data: openRouterRequest.body,
         timeout: openRouterRequest.timeout,
         responseType: 'stream' as const,
+        validateStatus: () => true, // Don't throw on any status code
         httpsAgent: new https.Agent({
           keepAlive: true,
           timeout: 60000,
@@ -193,13 +194,45 @@ export async function balanceInjectionMiddleware(
 
       if (response.status !== 200) {
         Logger.balanceError(
-          'OpenRouter returned non-200 status',
+          'OpenRouter returned non-200 status - forwarding error to client',
           correlationId,
           undefined,
           { status: response.status }
         );
-        res.write('data: [DONE]\n\n');
-        res.end();
+
+        // Forward the error response from OpenRouter to the client
+        // OpenRouter typically returns JSON errors, but we need to handle the stream
+        let errorData = '';
+        response.data.on('data', (chunk: Buffer) => {
+          errorData += chunk.toString();
+        });
+
+        response.data.on('end', () => {
+          try {
+            // Try to parse as JSON error
+            const errorJson = JSON.parse(errorData);
+            Logger.balanceError('Forwarding OpenRouter error', correlationId, undefined, { error: errorJson });
+
+            // Send error in SSE format
+            res.write(`data: ${JSON.stringify(errorJson)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } catch (parseError) {
+            // If not JSON, send as text
+            Logger.balanceError('Error response not JSON, sending as text', correlationId);
+            res.write(`data: {"error": {"message": "${errorData.replace(/"/g, '\\"')}"}}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+        });
+
+        response.data.on('error', (streamError: Error) => {
+          Logger.balanceError('Error reading error stream', correlationId, streamError);
+          res.write('data: {"error": {"message": "Failed to read error from upstream"}}\n\n');
+          res.write('data: [DONE]\n\n');
+          res.end();
+        });
+
         return;
       }
 

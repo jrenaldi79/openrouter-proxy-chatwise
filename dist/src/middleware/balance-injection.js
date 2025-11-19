@@ -96,6 +96,7 @@ async function balanceInjectionMiddleware(req, res, next) {
                 data: openRouterRequest.body,
                 timeout: openRouterRequest.timeout,
                 responseType: 'stream',
+                validateStatus: () => true,
                 httpsAgent: new https_1.default.Agent({
                     keepAlive: true,
                     timeout: 60000,
@@ -106,9 +107,32 @@ async function balanceInjectionMiddleware(req, res, next) {
             const response = await (0, axios_1.default)(axiosConfig);
             logger_1.Logger.balanceDebug('Axios response received', correlationId);
             if (response.status !== 200) {
-                logger_1.Logger.balanceError('OpenRouter returned non-200 status', correlationId, undefined, { status: response.status });
-                res.write('data: [DONE]\n\n');
-                res.end();
+                logger_1.Logger.balanceError('OpenRouter returned non-200 status - forwarding error to client', correlationId, undefined, { status: response.status });
+                let errorData = '';
+                response.data.on('data', (chunk) => {
+                    errorData += chunk.toString();
+                });
+                response.data.on('end', () => {
+                    try {
+                        const errorJson = JSON.parse(errorData);
+                        logger_1.Logger.balanceError('Forwarding OpenRouter error', correlationId, undefined, { error: errorJson });
+                        res.write(`data: ${JSON.stringify(errorJson)}\n\n`);
+                        res.write('data: [DONE]\n\n');
+                        res.end();
+                    }
+                    catch (parseError) {
+                        logger_1.Logger.balanceError('Error response not JSON, sending as text', correlationId);
+                        res.write(`data: {"error": {"message": "${errorData.replace(/"/g, '\\"')}"}}\n\n`);
+                        res.write('data: [DONE]\n\n');
+                        res.end();
+                    }
+                });
+                response.data.on('error', (streamError) => {
+                    logger_1.Logger.balanceError('Error reading error stream', correlationId, streamError);
+                    res.write('data: {"error": {"message": "Failed to read error from upstream"}}\n\n');
+                    res.write('data: [DONE]\n\n');
+                    res.end();
+                });
                 return;
             }
             logger_1.Logger.balanceInfo('Setting up streaming with balance injection', correlationId);

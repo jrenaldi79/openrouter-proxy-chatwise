@@ -3,7 +3,7 @@ import { KeyResponse } from '../models/KeyResponse';
 import { ProxyService } from './ProxyService';
 import { OpenRouterRequest } from '../models/OpenRouterRequest';
 import { Logger } from '../utils/logger';
-import { getWeaveOp } from '../config/weave';
+import { isWeaveEnabled, weave } from '../config/weave';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -38,7 +38,6 @@ export class BalanceInjectionService {
   private proxyService: ProxyService;
   private openrouterBaseUrl: string;
   private requestTimeoutMs: number;
-  private readonly weaveOp: ReturnType<typeof getWeaveOp>;
 
   constructor(
     proxyService: ProxyService,
@@ -48,12 +47,15 @@ export class BalanceInjectionService {
     this.proxyService = proxyService;
     this.openrouterBaseUrl = openrouterBaseUrl;
     this.requestTimeoutMs = requestTimeoutMs;
-    this.weaveOp = getWeaveOp();
 
-    // Bind and wrap methods with Weave tracing
-    this.getUserBalance = this.weaveOp(this.getUserBalance.bind(this), {
-      name: 'BalanceInjectionService.getUserBalance',
-    });
+    // Bind and wrap methods with Weave tracing if enabled
+    if (isWeaveEnabled()) {
+      this.getUserBalance = weave.op(this.getUserBalance.bind(this), {
+        name: 'BalanceInjectionService.getUserBalance',
+      });
+    } else {
+      this.getUserBalance = this.getUserBalance.bind(this);
+    }
   }
 
   /**

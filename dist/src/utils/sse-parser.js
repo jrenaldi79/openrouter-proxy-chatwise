@@ -68,7 +68,8 @@ function accumulateStreamResponse(chunks, correlationId) {
         }
         if (chunk.usage) {
             accumulated.usage.promptTokens = chunk.usage.prompt_tokens || null;
-            accumulated.usage.completionTokens = chunk.usage.completion_tokens || null;
+            accumulated.usage.completionTokens =
+                chunk.usage.completion_tokens || null;
             accumulated.usage.totalTokens = chunk.usage.total_tokens || null;
         }
     }

@@ -30,7 +30,6 @@ export declare class BalanceInjectionService {
     private proxyService;
     private openrouterBaseUrl;
     private requestTimeoutMs;
-    private readonly weaveOp;
     constructor(proxyService: ProxyService, openrouterBaseUrl: string, requestTimeoutMs: number);
     isChatWiseClient(headers: Record<string, string | string[] | undefined>): boolean;
     isNewSession(request: ChatCompletionRequest): boolean;

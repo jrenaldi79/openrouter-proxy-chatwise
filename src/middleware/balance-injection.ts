@@ -338,8 +338,8 @@ export async function balanceInjectionMiddleware(
                 tracingInput,
                 accumulatedResponse,
                 correlationId,
-                hasWeaveData,
-                hasLangfuseData
+                !!hasWeaveData,
+                !!hasLangfuseData
               );
             } catch (error) {
               Logger.error(

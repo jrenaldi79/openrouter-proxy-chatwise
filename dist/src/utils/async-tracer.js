@@ -58,7 +58,9 @@ async function traceStreamingCompletion(input, response, correlationId, hasWeave
             }
             catch (weaveError) {
                 logger_1.Logger.error('Weave streaming trace failed (non-blocking)', correlationId, {
-                    error: weaveError instanceof Error ? weaveError.message : String(weaveError),
+                    error: weaveError instanceof Error
+                        ? weaveError.message
+                        : String(weaveError),
                 });
             }
         }

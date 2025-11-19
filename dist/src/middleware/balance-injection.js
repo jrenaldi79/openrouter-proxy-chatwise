@@ -114,9 +114,11 @@ async function balanceInjectionMiddleware(req, res, next) {
             logger_1.Logger.balanceInfo('Setting up streaming with balance injection', correlationId);
             let isFirstContentChunk = true;
             let chunkBuffer = '';
-            const hasWeaveData = req.__weaveRequestData;
+            const hasWeaveData = req
+                .__weaveRequestData;
             const hasLangfuseData = req.__langfuseRequestData;
-            const needsTracing = ((0, weave_1.isWeaveEnabled)() && hasWeaveData) || ((0, langfuse_1.isLangfuseEnabled)() && hasLangfuseData);
+            const needsTracing = ((0, weave_1.isWeaveEnabled)() && hasWeaveData) ||
+                ((0, langfuse_1.isLangfuseEnabled)() && hasLangfuseData);
             let tracingBuffer = needsTracing ? '' : null;
             response.data.on('data', (chunk) => {
                 const chunkStr = chunk.toString();
@@ -170,7 +172,7 @@ async function balanceInjectionMiddleware(req, res, next) {
                 res.end();
                 if (tracingBuffer !== null && needsTracing) {
                     logger_1.Logger.info('Stream completed, starting async trace', correlationId);
-                    (async () => {
+                    void (async () => {
                         try {
                             const accumulatedResponse = (0, sse_parser_1.parseAndAccumulateSSE)(tracingBuffer, correlationId);
                             const tracingInput = {
@@ -183,7 +185,7 @@ async function balanceInjectionMiddleware(req, res, next) {
                                 presence_penalty: chatRequest.presence_penalty,
                                 frequency_penalty: chatRequest.frequency_penalty,
                             };
-                            await (0, async_tracer_1.traceStreamingCompletion)(tracingInput, accumulatedResponse, correlationId, hasWeaveData, hasLangfuseData);
+                            await (0, async_tracer_1.traceStreamingCompletion)(tracingInput, accumulatedResponse, correlationId, !!hasWeaveData, !!hasLangfuseData);
                         }
                         catch (error) {
                             logger_1.Logger.error('Async streaming trace failed (balance injection)', correlationId, {

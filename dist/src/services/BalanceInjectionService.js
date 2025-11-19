@@ -10,10 +10,14 @@ class BalanceInjectionService {
         this.proxyService = proxyService;
         this.openrouterBaseUrl = openrouterBaseUrl;
         this.requestTimeoutMs = requestTimeoutMs;
-        this.weaveOp = (0, weave_1.getWeaveOp)();
-        this.getUserBalance = this.weaveOp(this.getUserBalance.bind(this), {
-            name: 'BalanceInjectionService.getUserBalance',
-        });
+        if ((0, weave_1.isWeaveEnabled)()) {
+            this.getUserBalance = weave_1.weave.op(this.getUserBalance.bind(this), {
+                name: 'BalanceInjectionService.getUserBalance',
+            });
+        }
+        else {
+            this.getUserBalance = this.getUserBalance.bind(this);
+        }
     }
     isChatWiseClient(headers) {
         const userAgent = String(headers['user-agent'] || '').toLowerCase();

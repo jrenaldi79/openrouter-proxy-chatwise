@@ -16,13 +16,14 @@ function langfuseTracingMiddleware(req, res, next) {
     }
     const correlationId = req.correlationId || 'unknown';
     const requestBody = req.body;
-    req.__langfuseRequestData = {
-        model: requestBody.model,
-        messages: requestBody.messages,
-        temperature: requestBody.temperature,
-        max_tokens: requestBody.max_tokens,
-        correlationId,
-    };
+    req.__langfuseRequestData =
+        {
+            model: requestBody.model,
+            messages: requestBody.messages,
+            temperature: requestBody.temperature,
+            max_tokens: requestBody.max_tokens,
+            correlationId,
+        };
     logger_1.Logger.info('Langfuse tracing enabled for request', correlationId, {
         model: requestBody.model,
         messageCount: requestBody.messages?.length || 0,
@@ -47,7 +48,7 @@ function createTracedLangfuseLLMCall(proxyFn, openRouterRequest, llmInput) {
                 },
                 metadata: {
                     messageCount: llmInput.messages.length,
-                    hasSystemPrompt: llmInput.messages.some((m) => m.role === 'system'),
+                    hasSystemPrompt: llmInput.messages.some(m => m.role === 'system'),
                     correlationId: llmInput.correlationId,
                 },
             });

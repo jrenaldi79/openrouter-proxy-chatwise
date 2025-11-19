@@ -21,9 +21,7 @@ const createLogFormat = () => {
 const logger = winston_1.default.createLogger({
     level: LOG_LEVEL,
     format: createLogFormat(),
-    transports: [
-        new winston_1.default.transports.Console({}),
-    ],
+    transports: [new winston_1.default.transports.Console({})],
 });
 class Logger {
     static info(message, correlationId, meta) {

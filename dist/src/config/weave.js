@@ -88,6 +88,8 @@ function isApiKeyAllowed(apiKey) {
     return environment_1.envConfig.WEAVE_API_KEY_ALLOWLIST.includes(apiKey);
 }
 function getWeaveOp() {
-    return isWeaveEnabled() ? weave.op : (fn) => fn;
+    return isWeaveEnabled()
+        ? weave.op
+        : (fn) => fn;
 }
 //# sourceMappingURL=weave.js.map

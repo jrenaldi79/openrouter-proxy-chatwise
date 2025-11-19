@@ -137,8 +137,9 @@ async function v1ProxyHandler(req, res, next) {
         const isChatCompletion = req.path === '/chat/completions';
         const hasWeaveData = req.__weaveRequestData;
         const hasLangfuseData = req.__langfuseRequestData;
-        const needsTracing = isChatCompletion && (((0, weave_1.isWeaveEnabled)() && hasWeaveData) ||
-            ((0, langfuse_1.isLangfuseEnabled)() && hasLangfuseData));
+        const needsTracing = isChatCompletion &&
+            (((0, weave_1.isWeaveEnabled)() && hasWeaveData) ||
+                ((0, langfuse_1.isLangfuseEnabled)() && hasLangfuseData));
         if (needsTracing) {
             const requestBody = req.body;
             const llmInput = {
@@ -152,10 +153,13 @@ async function v1ProxyHandler(req, res, next) {
                 frequency_penalty: requestBody.frequency_penalty ?? 0,
                 correlationId,
             };
-            if ((0, weave_1.isWeaveEnabled)() && hasWeaveData && (0, langfuse_1.isLangfuseEnabled)() && hasLangfuseData) {
-                const weaveTracedCall = (0, weave_tracing_1.createTracedLLMCall)((request) => services_1.proxyService.makeRequest(request), openRouterRequest);
+            if ((0, weave_1.isWeaveEnabled)() &&
+                hasWeaveData &&
+                (0, langfuse_1.isLangfuseEnabled)() &&
+                hasLangfuseData) {
+                const weaveTracedCall = (0, weave_tracing_1.createTracedLLMCall)(request => services_1.proxyService.makeRequest(request), openRouterRequest);
                 const llmResponse = await weaveTracedCall(llmInput);
-                (0, langfuse_tracing_1.createTracedLangfuseLLMCall)(async () => ({ status: 200, headers: {}, data: llmResponse }), openRouterRequest, llmInput)().catch((error) => {
+                (0, langfuse_tracing_1.createTracedLangfuseLLMCall)(async () => ({ status: 200, headers: {}, data: llmResponse }), openRouterRequest, llmInput)().catch(error => {
                     logger_1.Logger.error('Langfuse tracing failed (non-blocking)', correlationId, {
                         error: error instanceof Error ? error.message : String(error),
                     });
@@ -170,7 +174,7 @@ async function v1ProxyHandler(req, res, next) {
                 });
             }
             else if ((0, weave_1.isWeaveEnabled)() && hasWeaveData) {
-                const tracedCall = (0, weave_tracing_1.createTracedLLMCall)((request) => services_1.proxyService.makeRequest(request), openRouterRequest);
+                const tracedCall = (0, weave_tracing_1.createTracedLLMCall)(request => services_1.proxyService.makeRequest(request), openRouterRequest);
                 const llmResponse = await tracedCall(llmInput);
                 proxyResponse = {
                     status: 200,
@@ -182,7 +186,7 @@ async function v1ProxyHandler(req, res, next) {
                 });
             }
             else if ((0, langfuse_1.isLangfuseEnabled)() && hasLangfuseData) {
-                const tracedCall = (0, langfuse_tracing_1.createTracedLangfuseLLMCall)((request) => services_1.proxyService.makeRequest(request), openRouterRequest, llmInput);
+                const tracedCall = (0, langfuse_tracing_1.createTracedLangfuseLLMCall)(request => services_1.proxyService.makeRequest(request), openRouterRequest, llmInput);
                 const llmResponse = await tracedCall();
                 proxyResponse = {
                     status: 200,

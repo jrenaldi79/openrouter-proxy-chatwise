@@ -47,7 +47,7 @@ async function createApp() {
     return app;
 }
 if (require.main === module) {
-    createApp().then(app => {
+    void createApp().then(app => {
         app.listen(environment_1.envConfig.PORT, () => {
             console.log(`OpenRouter Proxy Server listening on port ${environment_1.envConfig.PORT}`);
             console.log(`Proxying to: ${environment_1.envConfig.OPENROUTER_BASE_URL}`);

@@ -1,0 +1,30 @@
+{
+  "displayName": "OpenRouter Proxy - API Critical Latency",
+  "documentation": {
+    "content": "Alert when non-AI API endpoints (models, credits, auth) take longer than 10 seconds. These endpoints should be fast lookups and 10+ seconds indicates a serious issue.",
+    "mimeType": "text/markdown"
+  },
+  "conditions": [
+    {
+      "displayName": "API critical latency condition",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/openrouter_api_critical_latency\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 2,
+        "duration": "120s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "combiner": "OR",
+  "notificationChannels": [
+    "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
+  ],
+  "enabled": true
+}

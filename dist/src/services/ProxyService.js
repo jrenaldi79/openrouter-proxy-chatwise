@@ -7,6 +7,7 @@ exports.ProxyService = void 0;
 const axios_1 = __importDefault(require("axios"));
 const https_1 = __importDefault(require("https"));
 const OpenRouterRequest_1 = require("../models/OpenRouterRequest");
+const logger_1 = require("../utils/logger");
 class ProxyService {
     constructor(baseUrl = 'https://openrouter.ai', _defaultTimeout = 30000) {
         this.baseUrl = baseUrl;
@@ -45,7 +46,11 @@ class ProxyService {
                 return response;
             }
             catch (fetchError) {
-                console.warn('Fetch failed, falling back to axios:', fetchError);
+                logger_1.Logger.warn('Fetch failed, falling back to axios', request.getCorrelationId(), {
+                    error: fetchError instanceof Error
+                        ? fetchError.message
+                        : String(fetchError),
+                });
             }
         }
         const config = {

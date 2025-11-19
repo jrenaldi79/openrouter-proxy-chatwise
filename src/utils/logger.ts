@@ -30,11 +30,7 @@ const createLogFormat = (): winston.Logform.Format => {
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   format: createLogFormat(),
-  transports: [
-    new winston.transports.Console({
-      silent: process.env.NODE_ENV === 'test',
-    }),
-  ],
+  transports: [new winston.transports.Console({})],
 });
 
 // Logger utility class with correlation ID support

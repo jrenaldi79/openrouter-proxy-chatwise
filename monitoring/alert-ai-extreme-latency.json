@@ -1,0 +1,30 @@
+{
+  "displayName": "OpenRouter Proxy - AI Extreme Latency",
+  "documentation": {
+    "content": "Alert when AI chat completions take longer than 120 seconds (2 minutes). This is appropriate for AI workloads with complex reasoning, code generation, or thinking models. Normal AI responses can take 20-60+ seconds.",
+    "mimeType": "text/markdown"
+  },
+  "conditions": [
+    {
+      "displayName": "AI extreme latency condition",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/openrouter_ai_extreme_latency\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 3,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "combiner": "OR",
+  "notificationChannels": [
+    "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
+  ],
+  "enabled": true
+}

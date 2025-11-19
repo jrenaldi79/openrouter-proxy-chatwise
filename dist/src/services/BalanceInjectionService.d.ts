@@ -30,12 +30,15 @@ export declare class BalanceInjectionService {
     private proxyService;
     private openrouterBaseUrl;
     private requestTimeoutMs;
+    private readonly weaveOp;
     constructor(proxyService: ProxyService, openrouterBaseUrl: string, requestTimeoutMs: number);
+    isChatWiseClient(headers: Record<string, string | string[] | undefined>): boolean;
     isNewSession(request: ChatCompletionRequest): boolean;
     getUserBalance(authToken: AuthToken, correlationId: string): Promise<{
         totalCredits: number;
         usedCredits: number;
     } | null>;
+    private creditsToDollars;
     createBalanceChunk(chatId: string, model: string, balance: {
         totalCredits: number;
         usedCredits: number;

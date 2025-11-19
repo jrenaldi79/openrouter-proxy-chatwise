@@ -212,8 +212,11 @@ export async function balanceInjectionMiddleware(
       let chunkBuffer = '';
 
       // Check if tracing is enabled for this request
-      const hasWeaveData = (req as any).__weaveRequestData;
-      const hasLangfuseData = (req as any).__langfuseRequestData;
+      const hasWeaveData = (req as Request & { __weaveRequestData?: unknown })
+        .__weaveRequestData;
+      const hasLangfuseData = (
+        req as Request & { __langfuseRequestData?: unknown }
+      ).__langfuseRequestData;
       const needsTracing =
         (isWeaveEnabled() && hasWeaveData) ||
         (isLangfuseEnabled() && hasLangfuseData);

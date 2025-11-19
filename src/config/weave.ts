@@ -111,10 +111,12 @@ export function isApiKeyAllowed(apiKey: string | undefined): boolean {
  *
  * This allows instrumentation code to work whether Weave is enabled or not
  */
-export function getWeaveOp() {
+export function getWeaveOp():
+  | typeof weave.op
+  | (<T extends (...args: unknown[]) => unknown>(fn: T) => T) {
   return isWeaveEnabled()
     ? weave.op
-    : <T extends (...args: any[]) => any>(fn: T) => fn;
+    : <T extends (...args: unknown[]) => unknown>(fn: T) => fn;
 }
 
 /**

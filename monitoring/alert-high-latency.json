@@ -1,14 +1,15 @@
 {
-  "displayName": "OpenRouter Proxy - High Latency",
+  "displayName": "OpenRouter Proxy - High Latency (DEPRECATED)",
   "documentation": {
-    "content": "Alert when the OpenRouter proxy has requests taking longer than 2 seconds. This indicates performance issues that could affect user experience."
+    "content": "DEPRECATED: This alert has been replaced with workload-specific alerts:\n- alert-api-critical-latency.json (10s threshold for non-AI endpoints)\n- alert-ai-extreme-latency.json (120s threshold for AI chat completions)\n\nThe old 2-second threshold was inappropriate for AI workloads where 20-60+ second responses are normal for code generation, reasoning, and thinking models.",
+    "mimeType": "text/markdown"
   },
   "conditions": [
     {
-      "displayName": "High latency condition",
+      "displayName": "High latency condition (deprecated)",
       "conditionThreshold": {
-        "filter": "resource.type=\"logging_metric\" AND metric.type=\"logging.googleapis.com/user/openrouter_proxy_high_latency\"",
-        "comparison": "GREATER_THAN",
+        "filter": "metric.type=\"logging.googleapis.com/user/openrouter_proxy_high_latency\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
         "thresholdValue": 2,
         "duration": "120s",
         "aggregations": [
@@ -21,8 +22,9 @@
       }
     }
   ],
+  "combiner": "OR",
   "notificationChannels": [
     "projects/northwestern-sandbox/notificationChannels/9876424323386080866"
   ],
-  "enabled": true
+  "enabled": false
 }

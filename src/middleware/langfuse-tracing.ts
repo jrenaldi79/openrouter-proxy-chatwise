@@ -24,7 +24,7 @@ interface ChatCompletionRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -54,13 +54,14 @@ export function langfuseTracingMiddleware(
   const requestBody: ChatCompletionRequest = req.body;
 
   // Store request data on request object for later use
-  (req as any).__langfuseRequestData = {
-    model: requestBody.model,
-    messages: requestBody.messages,
-    temperature: requestBody.temperature,
-    max_tokens: requestBody.max_tokens,
-    correlationId,
-  };
+  (req as Request & { __langfuseRequestData?: unknown }).__langfuseRequestData =
+    {
+      model: requestBody.model,
+      messages: requestBody.messages,
+      temperature: requestBody.temperature,
+      max_tokens: requestBody.max_tokens,
+      correlationId,
+    };
 
   Logger.info('Langfuse tracing enabled for request', correlationId, {
     model: requestBody.model,

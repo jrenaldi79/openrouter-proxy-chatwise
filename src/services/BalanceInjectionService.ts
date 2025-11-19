@@ -3,6 +3,7 @@ import { KeyResponse } from '../models/KeyResponse';
 import { ProxyService } from './ProxyService';
 import { OpenRouterRequest } from '../models/OpenRouterRequest';
 import { Logger } from '../utils/logger';
+import { getWeaveOp } from '../config/weave';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -37,6 +38,7 @@ export class BalanceInjectionService {
   private proxyService: ProxyService;
   private openrouterBaseUrl: string;
   private requestTimeoutMs: number;
+  private readonly weaveOp: ReturnType<typeof getWeaveOp>;
 
   constructor(
     proxyService: ProxyService,
@@ -46,6 +48,12 @@ export class BalanceInjectionService {
     this.proxyService = proxyService;
     this.openrouterBaseUrl = openrouterBaseUrl;
     this.requestTimeoutMs = requestTimeoutMs;
+    this.weaveOp = getWeaveOp();
+
+    // Bind and wrap methods with Weave tracing
+    this.getUserBalance = this.weaveOp(this.getUserBalance.bind(this), {
+      name: 'BalanceInjectionService.getUserBalance',
+    });
   }
 
   /**
@@ -56,19 +64,23 @@ export class BalanceInjectionService {
   ): boolean {
     const userAgent = String(headers['user-agent'] || '').toLowerCase();
     const origin = String(headers['origin'] || '');
-    const referer = String(headers['referer'] || '');
+    const referer = String(headers['referer'] || '').toLowerCase();
+    const httpReferer = String(headers['http-referer'] || '').toLowerCase();
 
     // Check for explicit ChatWise indicators
     const hasExplicitChatWise =
       userAgent.includes('chatwise') ||
       origin.includes('chatwise') ||
       referer.includes('chatwise') ||
-      userAgent.includes('electron');
+      httpReferer.includes('chatwise') ||
+      userAgent.includes('electron') ||
+      userAgent.includes('ai-sdk/openrouter'); // ChatWise's new user-agent
 
     // Check for desktop app patterns (empty origin/referer with standard browser user-agent)
     const isDesktopApp =
       !origin &&
       !referer &&
+      !httpReferer &&
       (userAgent.includes('chrome') || userAgent.includes('webkit')) &&
       userAgent.includes('macintosh');
 

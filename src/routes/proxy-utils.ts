@@ -66,69 +66,6 @@ export function createOpenRouterRequest(
 }
 
 /**
- * Check if response is Cloudflare blocked
- */
-export function isCloudflareBlocked(data: unknown): boolean {
-  return (
-    typeof data === 'string' &&
-    data.includes('<!DOCTYPE html>') &&
-    data.includes('Cloudflare')
-  );
-}
-
-/**
- * Handle Cloudflare blocking with fallback logic
- */
-export function handleCloudflareBlock(
-  req: Request,
-  res: Response,
-  correlationId: string,
-  fallbackData: unknown
-): boolean {
-  // If we have a real API key for testing, don't use mock - return the actual error
-  const authHeader = req.headers.authorization as string;
-  if (
-    authHeader &&
-    authHeader.includes('sk-or-v1-') &&
-    process.env.OPENROUTER_TEST_API_KEY
-  ) {
-    console.log(
-      `[${correlationId}] Cloudflare blocked real API key - returning 502 error`
-    );
-
-    const errorResponse: ProxyErrorResponse = {
-      error: {
-        code: 'UPSTREAM_ERROR',
-        message:
-          'OpenRouter API blocked by Cloudflare - check network configuration',
-        correlationId,
-      },
-    };
-
-    res.writeHead(502, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'X-Correlation-Id': correlationId,
-    });
-    res.end(JSON.stringify(errorResponse));
-    return true;
-  }
-
-  // Use fallback data for local development
-  console.log(
-    `[${correlationId}] Cloudflare blocked - returning mock response for local dev`
-  );
-
-  res.writeHead(200, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'X-Correlation-Id': correlationId,
-  });
-  res.end(JSON.stringify(fallbackData));
-  return true;
-}
-
-/**
  * Map OpenRouter status codes to error codes
  */
 export function mapStatusToErrorCode(status: number): {

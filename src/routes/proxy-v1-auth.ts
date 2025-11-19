@@ -6,25 +6,9 @@ import { Request, Response } from 'express';
 import { proxyService } from '../config/services';
 import {
   createOpenRouterRequest,
-  isCloudflareBlocked,
-  handleCloudflareBlock,
   sendCleanResponse,
   ProxyErrorResponse,
 } from './proxy-utils';
-
-/**
- * Mock auth response for Cloudflare fallback
- */
-const MOCK_AUTH_RESPONSE = {
-  data: {
-    name: 'Local Development Mock',
-    models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-haiku'],
-    api_key: 'mock-key',
-    monthly_limit: 100000,
-    usage: 0,
-    is_valid: true,
-  },
-};
 
 /**
  * Special handling for /v1/auth/key endpoint
@@ -46,27 +30,6 @@ export async function v1AuthKeyHandler(
 
     // Make request to OpenRouter
     const proxyResponse = await proxyService.makeRequest(openRouterRequest);
-
-    // Check if we got blocked by Cloudflare (HTML response instead of JSON)
-    if (isCloudflareBlocked(proxyResponse.data)) {
-      // Enhance mock response with actual API key if available
-      const mockResponse = {
-        ...MOCK_AUTH_RESPONSE,
-        data: {
-          ...MOCK_AUTH_RESPONSE.data,
-          api_key:
-            req.headers.authorization?.replace('Bearer ', '') || 'mock-key',
-        },
-      };
-
-      const handled = handleCloudflareBlock(
-        req,
-        res,
-        correlationId,
-        mockResponse
-      );
-      if (handled) return;
-    }
 
     // Handle error responses
     if (proxyResponse.status >= 400) {

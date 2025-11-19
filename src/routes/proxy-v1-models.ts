@@ -7,40 +7,10 @@ import { proxyService } from '../config/services';
 import {
   validateAuth,
   createOpenRouterRequest,
-  isCloudflareBlocked,
-  handleCloudflareBlock,
   mapStatusToErrorCode,
   sendCleanResponse,
   ProxyErrorResponse,
 } from './proxy-utils';
-
-/**
- * Mock models response for Cloudflare fallback
- */
-const MOCK_MODELS_RESPONSE = {
-  data: [
-    {
-      id: 'gpt-3.5-turbo',
-      name: 'GPT-3.5 Turbo',
-      pricing: { prompt: '0.0015', completion: '0.002' },
-    },
-    {
-      id: 'gpt-4',
-      name: 'GPT-4',
-      pricing: { prompt: '0.03', completion: '0.06' },
-    },
-    {
-      id: 'claude-3-haiku',
-      name: 'Claude 3 Haiku',
-      pricing: { prompt: '0.00025', completion: '0.00125' },
-    },
-    {
-      id: 'google/gemini-2.5-flash',
-      name: 'Gemini 2.5 Flash',
-      pricing: { prompt: '0.00075', completion: '0.003' },
-    },
-  ],
-};
 
 /**
  * Special handling for /v1/models endpoint
@@ -69,17 +39,6 @@ export async function v1ModelsHandler(
 
     // Make request to OpenRouter
     const proxyResponse = await proxyService.makeRequest(openRouterRequest);
-
-    // Check if we got blocked by Cloudflare (HTML response instead of JSON)
-    if (isCloudflareBlocked(proxyResponse.data)) {
-      const handled = handleCloudflareBlock(
-        req,
-        res,
-        correlationId,
-        MOCK_MODELS_RESPONSE
-      );
-      if (handled) return;
-    }
 
     // Handle error responses
     if (proxyResponse.status >= 400) {

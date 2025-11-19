@@ -11,6 +11,10 @@ import { ChatCompletionRequest } from '../services/BalanceInjectionService';
 import { Logger } from '../utils/logger';
 import { balanceInjectionService } from '../config/services';
 import { envConfig } from '../config/environment';
+import { isWeaveEnabled } from '../config/weave';
+import { isLangfuseEnabled } from '../config/langfuse';
+import { parseAndAccumulateSSE } from '../utils/sse-parser';
+import { traceStreamingCompletion } from '../utils/async-tracer';
 
 /**
  * Balance injection middleware for new chat sessions
@@ -56,7 +60,7 @@ export async function balanceInjectionMiddleware(
     Logger.balanceClient(isChatWise, userAgent, correlationId);
 
     if (!isChatWise) {
-      Logger.balanceDebug('SKIPPING: Not a ChatWise client', correlationId);
+      Logger.info('SKIPPING: Not a ChatWise client', correlationId);
       return next();
     }
 
@@ -69,7 +73,7 @@ export async function balanceInjectionMiddleware(
     );
 
     if (!isNewSession) {
-      Logger.balanceDebug('SKIPPING: Not a new session', correlationId);
+      Logger.info('SKIPPING: Not a new session', correlationId);
       return next(); // Not a new session, continue normal processing
     }
 
@@ -78,7 +82,7 @@ export async function balanceInjectionMiddleware(
     Logger.balanceAuth(!!authToken, authToken?.isValid || false, correlationId);
 
     if (!authToken || !authToken.isValid) {
-      Logger.balanceDebug(
+      Logger.info(
         'AUTH FAILED: Passing to main handler',
         correlationId
       );
@@ -88,7 +92,7 @@ export async function balanceInjectionMiddleware(
     // Only inject balance for streaming requests (for now)
     Logger.balanceStream(!!chatRequest.stream, correlationId);
     if (!chatRequest.stream) {
-      Logger.balanceDebug(
+      Logger.info(
         'NON-STREAMING: Skipping balance injection',
         correlationId
       );
@@ -213,6 +217,15 @@ export async function balanceInjectionMiddleware(
       let isFirstContentChunk = true;
       let chunkBuffer = '';
 
+      // Check if tracing is enabled for this request
+      const hasWeaveData = (req as any).__weaveRequestData;
+      const hasLangfuseData = (req as any).__langfuseRequestData;
+      const needsTracing =
+        (isWeaveEnabled() && hasWeaveData) || (isLangfuseEnabled() && hasLangfuseData);
+
+      // Buffer for tracing (separate from chunkBuffer for SSE parsing)
+      let tracingBuffer = needsTracing ? '' : null;
+
       // Parse and relay OpenRouter's SSE stream with balance injection
       response.data.on('data', (chunk: Buffer) => {
         const chunkStr = chunk.toString();
@@ -220,6 +233,11 @@ export async function balanceInjectionMiddleware(
           chunkPreview: chunkStr.substring(0, 100),
         });
         chunkBuffer += chunkStr;
+
+        // Buffer for tracing if needed
+        if (tracingBuffer !== null) {
+          tracingBuffer += chunkStr;
+        }
 
         // Process complete SSE events (lines ending with \n\n)
         const events = chunkBuffer.split('\n\n');
@@ -256,7 +274,7 @@ export async function balanceInjectionMiddleware(
                 jsonObj.choices[0].delta.content &&
                 jsonObj.choices[0].delta.content.trim()
               ) {
-                Logger.balanceInfo(
+                Logger.info(
                   'Found content chunk - injecting balance',
                   correlationId
                 );
@@ -268,18 +286,18 @@ export async function balanceInjectionMiddleware(
                 // Reconstruct the SSE event
                 modifiedEvent = `data: ${JSON.stringify(jsonObj)}`;
                 isFirstContentChunk = false;
-                Logger.balanceInfo(
+                Logger.info(
                   'Balance injected into first chunk',
                   correlationId
                 );
               } else {
-                Logger.balanceEvent(
+                Logger.info(
                   'Skipping event - no content or empty',
                   correlationId
                 );
               }
             } catch (error) {
-              Logger.balanceEvent(
+              Logger.error(
                 'Invalid JSON - skipping injection',
                 correlationId,
                 {
@@ -290,29 +308,69 @@ export async function balanceInjectionMiddleware(
           }
 
           res.write(modifiedEvent + '\n\n');
-          Logger.balanceEvent('Event relayed', correlationId);
+          Logger.info('Event relayed', correlationId);
         }
       });
 
       response.data.on('end', () => {
-        Logger.balanceEvent('Stream ended', correlationId);
+        Logger.info('Stream ended', correlationId);
         res.end();
+
+        // Async tracing after stream completes (non-blocking)
+        if (tracingBuffer !== null && needsTracing) {
+          Logger.info('Stream completed, starting async trace', correlationId);
+
+          // Fire-and-forget async tracing
+          (async () => {
+            try {
+              const accumulatedResponse = parseAndAccumulateSSE(
+                tracingBuffer!,
+                correlationId
+              );
+
+              const tracingInput = {
+                model: chatRequest.model || 'unknown',
+                messages: chatRequest.messages || [],
+                temperature: chatRequest.temperature,
+                max_tokens: chatRequest.max_tokens,
+                top_p: chatRequest.top_p as number | undefined,
+                n: chatRequest.n as number | undefined,
+                presence_penalty: chatRequest.presence_penalty as number | undefined,
+                frequency_penalty: chatRequest.frequency_penalty as number | undefined,
+              };
+
+              await traceStreamingCompletion(
+                tracingInput,
+                accumulatedResponse,
+                correlationId,
+                hasWeaveData,
+                hasLangfuseData
+              );
+            } catch (error) {
+              Logger.error('Async streaming trace failed (balance injection)', correlationId, {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })();
+        }
       });
 
       response.data.on('error', (error: Error) => {
-        Logger.balanceError('Stream error', correlationId, error);
+        Logger.error('Stream error', correlationId, {
+          error: error.message || String(error),
+        });
         res.write('data: [DONE]\n\n');
         res.end();
       });
 
-      Logger.balanceDebug('All handlers set up', correlationId);
+      Logger.info('All handlers set up', correlationId);
     } catch (streamError) {
-      Logger.balanceError(
+      Logger.error(
         'Streaming setup error',
         correlationId,
         streamError instanceof Error
-          ? streamError
-          : new Error(String(streamError))
+          ? { error: streamError.message }
+          : { error: String(streamError) }
       );
       res.write('data: [DONE]\n\n');
       res.end();
@@ -320,10 +378,12 @@ export async function balanceInjectionMiddleware(
 
     return;
   } catch (error) {
-    Logger.balanceError(
+    Logger.error(
       'Balance injection error',
       correlationId,
-      error instanceof Error ? error : new Error(String(error))
+      error instanceof Error
+        ? { error: error.message }
+        : { error: String(error) }
     );
     // Continue with normal processing if balance injection fails
     return next();

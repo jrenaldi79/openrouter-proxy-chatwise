@@ -20,6 +20,19 @@ export interface EnvironmentConfig {
 
   // Security Configuration
   NODE_TLS_REJECT_UNAUTHORIZED: boolean;
+
+  // Weave Observability Configuration
+  WANDB_API_KEY?: string;
+  WEAVE_PROJECT_NAME?: string;
+  WEAVE_API_KEY_ALLOWLIST: string[];
+  WEAVE_ENABLED: boolean;
+
+  // Langfuse Observability Configuration
+  LANGFUSE_PUBLIC_KEY?: string;
+  LANGFUSE_SECRET_KEY?: string;
+  LANGFUSE_BASE_URL?: string;
+  LANGFUSE_API_KEY_ALLOWLIST: string[];
+  LANGFUSE_ENABLED: boolean;
 }
 
 /**
@@ -52,6 +65,26 @@ export function loadEnvironmentConfig(): EnvironmentConfig {
     // Security Configuration
     NODE_TLS_REJECT_UNAUTHORIZED:
       process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+
+    // Weave Observability Configuration
+    WANDB_API_KEY: process.env.WANDB_API_KEY,
+    WEAVE_PROJECT_NAME: process.env.WEAVE_PROJECT_NAME,
+    WEAVE_API_KEY_ALLOWLIST: process.env.WEAVE_API_KEY_ALLOWLIST
+      ? process.env.WEAVE_API_KEY_ALLOWLIST.split(',').map(key => key.trim())
+      : [],
+    WEAVE_ENABLED:
+      !!process.env.WANDB_API_KEY && !!process.env.WEAVE_PROJECT_NAME,
+
+    // Langfuse Observability Configuration
+    LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
+    LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
+    LANGFUSE_BASE_URL:
+      process.env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com',
+    LANGFUSE_API_KEY_ALLOWLIST: process.env.LANGFUSE_API_KEY_ALLOWLIST
+      ? process.env.LANGFUSE_API_KEY_ALLOWLIST.split(',').map(key => key.trim())
+      : [],
+    LANGFUSE_ENABLED:
+      !!process.env.LANGFUSE_PUBLIC_KEY && !!process.env.LANGFUSE_SECRET_KEY,
   };
 }
 

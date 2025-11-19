@@ -41,15 +41,20 @@
     "npm": ">=8.0.0"
   },
   "dependencies": {
+    "@langfuse/otel": "^4.2.0",
+    "@langfuse/tracing": "^4.2.0",
+    "@opentelemetry/sdk-node": "^0.205.0",
     "axios": "^1.12.2",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
-    "uuid": "^8.3.2",
-    "winston": "^3.17.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
-    "ts-node": "^10.9.2"
+    "uuid": "^8.3.2",
+    "weave": "^0.9.3",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

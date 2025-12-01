@@ -1,8 +1,21 @@
 /**
  * Test script to verify Weave tracing with multi-turn conversations
+ *
+ * Usage: OPENROUTER_TEST_API_KEY=your-key node dev-tests/test-weave-chat.js
  */
 
-const apiKey = process.env.OPENROUTER_TEST_API_KEY || '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';
+const apiKey = process.env.OPENROUTER_TEST_API_KEY;
+
+if (!apiKey) {
+  console.error('❌ Error: OPENROUTER_TEST_API_KEY environment variable is required');
+  console.error('   Usage: OPENROUTER_TEST_API_KEY="sk-or-v1-your-key" node dev-tests/test-weave-chat.js');
+  process.exit(1);
+}
+
+if (!apiKey.startsWith('sk-or-v1-')) {
+  console.error('❌ Error: Invalid API key format. Must start with "sk-or-v1-"');
+  process.exit(1);
+}
 
 async function sendChatMessage(messages) {
   const response = await fetch('http://localhost:3000/v1/chat/completions', {

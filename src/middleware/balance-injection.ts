@@ -16,6 +16,7 @@ import { isLangfuseEnabled } from '../config/langfuse';
 import { parseAndAccumulateSSE } from '../utils/sse-parser';
 import { traceStreamingCompletion } from '../utils/async-tracer';
 import { injectAnthropicProvider } from '../utils/provider-routing';
+import { withRetry, DEFAULT_RETRY_CONFIG } from '../utils/retry';
 
 /**
  * Balance injection middleware for new chat sessions
@@ -196,7 +197,12 @@ export async function balanceInjectionMiddleware(
       };
 
       Logger.balanceDebug('Making axios request...', correlationId);
-      const response = await axios(axiosConfig);
+      // Wrap axios call with retry logic for transient network errors
+      const response = await withRetry(
+        () => axios(axiosConfig),
+        correlationId,
+        DEFAULT_RETRY_CONFIG
+      );
       Logger.balanceDebug('Axios response received', correlationId);
 
       if (response.status !== 200) {

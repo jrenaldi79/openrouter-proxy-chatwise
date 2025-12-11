@@ -19,6 +19,7 @@ import {
   ProxyErrorResponse,
 } from './proxy-utils';
 import { injectAnthropicProvider } from '../utils/provider-routing';
+import { withRetry, DEFAULT_RETRY_CONFIG } from '../utils/retry';
 
 /**
  * Problematic headers that should be filtered out for upstream requests
@@ -134,7 +135,13 @@ async function handleStreamingRequest(
       }),
     };
 
-    const response = await axios(axiosConfig);
+    // Wrap axios call with retry logic for transient network errors
+    // This only retries connection failures - once streaming starts, we can't retry
+    const response = await withRetry(
+      () => axios(axiosConfig),
+      correlationId,
+      DEFAULT_RETRY_CONFIG
+    );
 
     Logger.info('Upstream response received', correlationId, {
       statusCode: response.status,

@@ -15,6 +15,7 @@ import { isWeaveEnabled } from '../config/weave';
 import { isLangfuseEnabled } from '../config/langfuse';
 import { parseAndAccumulateSSE } from '../utils/sse-parser';
 import { traceStreamingCompletion } from '../utils/async-tracer';
+import { injectAnthropicProvider } from '../utils/provider-routing';
 
 /**
  * Balance injection middleware for new chat sessions
@@ -158,12 +159,15 @@ export async function balanceInjectionMiddleware(
         correlationId
       );
 
+      // Inject Anthropic provider routing for Claude models to avoid Google Vertex truncation issues
+      const modifiedChatRequest = injectAnthropicProvider(chatRequest, correlationId);
+
       const openRouterRequest = OpenRouterRequest.fromProxyRequest(
         {
           method: 'POST',
           path: openRouterPath,
           headers: req.headers as Record<string, string>,
-          body: chatRequest,
+          body: modifiedChatRequest,
           query: req.query as Record<string, string>,
         },
         envConfig.OPENROUTER_BASE_URL,
@@ -294,11 +298,6 @@ export async function balanceInjectionMiddleware(
         for (const event of events) {
           if (!event.trim()) continue;
 
-          Logger.balanceEvent(
-            `Checking event: ${event.substring(0, 200)}`,
-            correlationId
-          );
-
           let modifiedEvent = event;
 
           // Replace chat IDs to maintain consistency
@@ -306,6 +305,32 @@ export async function balanceInjectionMiddleware(
             /"id":"[^"]+"/g,
             `"id":"${chatId}"`
           );
+
+          // TEMPORARY DEBUG: Log detailed stream data for comparison
+          if (process.env.STREAM_DEBUG === 'true' && event.startsWith('data: {')) {
+            try {
+              const debugJson = JSON.parse(event.substring(6));
+              const delta = debugJson.choices?.[0]?.delta || {};
+              const deltaKeys = Object.keys(delta);
+              const finishReason = debugJson.choices?.[0]?.finish_reason;
+              Logger.info('[STREAM_DEBUG] FROM_OPENROUTER', correlationId, {
+                deltaKeys, // Show all keys present in delta
+                hasContent: !!delta.content,
+                contentPreview: delta.content?.substring(0, 100),
+                hasThinking: !!delta.thinking,
+                thinkingPreview: delta.thinking?.substring(0, 100),
+                hasThinkingDelta: !!delta.thinking_delta,
+                thinkingDeltaPreview: delta.thinking_delta?.substring(0, 100),
+                // Check for reasoning field (some providers use this)
+                hasReasoning: !!(delta as Record<string, unknown>).reasoning,
+                reasoningPreview: ((delta as Record<string, unknown>).reasoning as string)?.substring(0, 100),
+                finishReason,
+                role: delta.role,
+              });
+            } catch {
+              // Ignore parse errors for debug logging
+            }
+          }
 
           // Inject balance into the first content chunk
           if (isFirstContentChunk && event.startsWith('data: {')) {
@@ -334,11 +359,6 @@ export async function balanceInjectionMiddleware(
                 modifiedEvent = `data: ${JSON.stringify(jsonObj)}`;
                 isFirstContentChunk = false;
                 Logger.info('Balance injected into first chunk', correlationId);
-              } else {
-                Logger.info(
-                  'Skipping event - no content or empty',
-                  correlationId
-                );
               }
             } catch (error) {
               Logger.error('Invalid JSON - skipping injection', correlationId, {
@@ -347,8 +367,23 @@ export async function balanceInjectionMiddleware(
             }
           }
 
+          // TEMPORARY DEBUG: Log what we're sending to client
+          if (process.env.STREAM_DEBUG === 'true' && modifiedEvent.startsWith('data: {')) {
+            try {
+              const debugJson = JSON.parse(modifiedEvent.substring(6));
+              const delta = debugJson.choices?.[0]?.delta || {};
+              Logger.info('[STREAM_DEBUG] TO_CLIENT', correlationId, {
+                hasContent: !!delta.content,
+                contentPreview: delta.content?.substring(0, 100),
+                hasThinking: !!delta.thinking,
+                hasThinkingDelta: !!delta.thinking_delta,
+              });
+            } catch {
+              // Ignore parse errors for debug logging
+            }
+          }
+
           res.write(modifiedEvent + '\n\n');
-          Logger.info('Event relayed', correlationId);
         }
       });
 

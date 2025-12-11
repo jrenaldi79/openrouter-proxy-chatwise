@@ -3,8 +3,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import https from 'https';
-import url from 'url';
 import { proxyService } from '../config/services';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
@@ -18,19 +18,88 @@ import {
   sendCleanResponse,
   ProxyErrorResponse,
 } from './proxy-utils';
+import { injectAnthropicProvider } from '../utils/provider-routing';
 
 /**
- * Handle streaming requests with direct HTTP proxy and optional tracing
+ * Problematic headers that should be filtered out for upstream requests
+ * These can cause SSL/TLS issues or are hop-by-hop headers
  */
-function handleStreamingRequest(
+const PROBLEMATIC_HEADERS = new Set([
+  'host',
+  'connection',
+  'upgrade',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'content-length',
+  // HTTP/2 specific headers that shouldn't be in HTTP/1.1
+  ':authority',
+  ':method',
+  ':path',
+  ':scheme',
+  // Express/Node.js specific headers
+  'x-forwarded-for',
+  'x-forwarded-proto',
+  'x-forwarded-host',
+  'x-real-ip',
+  // Cache control headers that might interfere
+  'if-modified-since',
+  'if-none-match',
+  'if-range',
+  'if-unmodified-since',
+  'range',
+]);
+
+/**
+ * Filter headers for upstream requests, removing problematic ones
+ */
+function filterHeadersForUpstream(
+  headers: Record<string, string | string[] | undefined>,
+  targetHost: string
+): Record<string, string | string[] | undefined> {
+  const filtered: Record<string, string | string[] | undefined> = {};
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (!PROBLEMATIC_HEADERS.has(key.toLowerCase()) && value !== undefined) {
+      filtered[key] = value;
+    }
+  }
+
+  // Set the correct host for the target
+  filtered['host'] = targetHost;
+
+  return filtered;
+}
+
+/**
+ * Handle streaming requests using axios (same approach as balance injection which works)
+ */
+async function handleStreamingRequest(
   req: Request,
   res: Response,
   correlationId: string
-): void {
+): Promise<void> {
   const targetUrl = `${envConfig.OPENROUTER_BASE_URL}/api/v1${req.path}`;
-  const proxyHeaders = { ...req.headers };
-  proxyHeaders['host'] = new URL(envConfig.OPENROUTER_BASE_URL).host;
-  delete proxyHeaders['content-length']; // Let the proxy recalculate
+  const targetHost = new URL(envConfig.OPENROUTER_BASE_URL).host;
+
+  // Filter out problematic headers (same filtering as non-streaming requests)
+  const proxyHeaders = filterHeadersForUpstream(req.headers, targetHost);
+
+  // Inject Anthropic provider routing for Claude models to avoid Google Vertex truncation issues
+  const modifiedBody = req.body ? injectAnthropicProvider(req.body, correlationId) : req.body;
+
+  // Pre-calculate body size for logging
+  const bodyString = modifiedBody ? JSON.stringify(modifiedBody) : '';
+  const bodySize = Buffer.byteLength(bodyString, 'utf8');
+
+  Logger.info('Streaming request initiated', correlationId, {
+    targetUrl,
+    method: req.method,
+    hasBody: !!req.body,
+    bodySize,
+  });
 
   // Get tracing flags from request (set by middleware)
   const hasWeaveData = (req as any).hasWeaveData || false;
@@ -40,102 +109,224 @@ function handleStreamingRequest(
   // Stream accumulation for tracing
   let streamBuffer = '';
 
-  const targetOptions = url.parse(targetUrl) as url.UrlWithStringQuery & {
-    method?: string;
-    headers?: Record<string, string | string[] | undefined>;
-  };
-  targetOptions.method = req.method;
-  targetOptions.headers = proxyHeaders;
+  // Track stream statistics for debugging
+  let chunkCount = 0;
+  let totalBytes = 0;
+  let lastFinishReason: string | null = null;
+  let lastChunkPreview = '';
 
-  const proxyReq = https.request(
-    targetOptions,
-    (proxyRes: import('http').IncomingMessage) => {
-      // Forward status and headers
-      res.status(proxyRes.statusCode || 500);
+  try {
+    // Use axios with streaming - same approach as balance injection which works
+    const axiosConfig = {
+      method: req.method as 'POST' | 'GET',
+      url: targetUrl,
+      headers: proxyHeaders as Record<string, string>,
+      data: modifiedBody,
+      timeout: 300000, // 5 minutes for long-running streaming requests
+      responseType: 'stream' as const,
+      validateStatus: (): boolean => true, // Don't throw on any status code
+      httpsAgent: new https.Agent({
+        keepAlive: true,
+        timeout: 300000,
+        rejectUnauthorized: envConfig.NODE_TLS_REJECT_UNAUTHORIZED,
+      }),
+    };
 
-      // Forward headers but clean them up
-      const responseHeaders = { ...proxyRes.headers };
-      delete responseHeaders['transfer-encoding'];
-      res.set(responseHeaders);
+    const response = await axios(axiosConfig);
 
-      // Handle streaming data
-      proxyRes.on('data', (chunk: Buffer) => {
-        // Accumulate for tracing if needed
-        if (shouldTrace) {
-          streamBuffer += chunk.toString();
-        }
+    Logger.info('Upstream response received', correlationId, {
+      statusCode: response.status,
+      headers: Object.keys(response.headers),
+    });
 
-        // Forward to client immediately (real-time streaming)
-        res.write(chunk);
-      });
+    // Forward status and headers
+    res.status(response.status);
 
-      proxyRes.on('end', async () => {
-        res.end();
+    // Forward headers but clean them up
+    const responseHeaders = { ...response.headers };
+    delete responseHeaders['transfer-encoding'];
+    res.set(responseHeaders);
 
-        // Create traces if needed
-        if (shouldTrace && streamBuffer) {
-          try {
-            const { parseAndAccumulateSSE } = await import(
-              '../utils/sse-parser'
-            );
-            const { traceStreamingCompletion } = await import(
-              '../utils/async-tracer'
-            );
+    // Handle streaming data
+    response.data.on('data', (chunk: Buffer) => {
+      chunkCount++;
+      totalBytes += chunk.length;
 
-            Logger.info(
-              'Stream completed, starting async trace',
-              correlationId
-            );
+      const chunkStr = chunk.toString();
 
-            const accumulatedResponse = parseAndAccumulateSSE(
-              streamBuffer,
-              correlationId
-            );
+      // Capture finish_reason from SSE events for debugging
+      try {
+        const lines = chunkStr.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+            const jsonStr = line.substring(6);
+            if (jsonStr.trim()) {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.choices?.[0]?.finish_reason) {
+                lastFinishReason = parsed.choices[0].finish_reason;
+              }
+              // Capture last chunk preview for debugging
+              lastChunkPreview = jsonStr.substring(0, 200);
 
-            const chatRequest = req.body as {
-              model: string;
-              messages: Array<{ role: string; content: string }>;
-              temperature?: number;
-              max_tokens?: number;
-              top_p?: number;
-              n?: number;
-              presence_penalty?: number;
-              frequency_penalty?: number;
-            };
-
-            const tracingInput = {
-              model: chatRequest.model || 'unknown',
-              messages: chatRequest.messages || [],
-              temperature: chatRequest.temperature,
-              max_tokens: chatRequest.max_tokens,
-              top_p: chatRequest.top_p,
-              n: chatRequest.n,
-              presence_penalty: chatRequest.presence_penalty,
-              frequency_penalty: chatRequest.frequency_penalty,
-              correlationId,
-            };
-
-            await traceStreamingCompletion(
-              tracingInput,
-              accumulatedResponse,
-              correlationId,
-              hasWeaveData,
-              hasLangfuseData
-            );
-          } catch (error) {
-            Logger.error('Async streaming trace failed', correlationId, {
-              error: error instanceof Error ? error.message : String(error),
-            });
+              // TEMPORARY DEBUG: Log detailed stream data for comparison
+              if (process.env.STREAM_DEBUG === 'true') {
+                const delta = parsed.choices?.[0]?.delta || {};
+                const deltaKeys = Object.keys(delta);
+                Logger.info('[STREAM_DEBUG] FROM_OPENROUTER', correlationId, {
+                  deltaKeys, // Show all keys present in delta
+                  hasContent: !!delta.content,
+                  contentPreview: delta.content?.substring(0, 100),
+                  hasThinking: !!delta.thinking,
+                  thinkingPreview: delta.thinking?.substring(0, 100),
+                  hasThinkingDelta: !!delta.thinking_delta,
+                  thinkingDeltaPreview: delta.thinking_delta?.substring(0, 100),
+                  // Check for reasoning field (some providers use this)
+                  hasReasoning: !!(delta as any).reasoning,
+                  reasoningPreview: (delta as any).reasoning?.substring(0, 100),
+                  finishReason: parsed.choices?.[0]?.finish_reason,
+                  role: delta.role,
+                  chunkNum: chunkCount,
+                });
+              }
+            }
           }
         }
-      });
-    }
-  );
+      } catch {
+        // Ignore parse errors - chunks may be partial
+      }
 
-  proxyReq.on('error', (error: Error) => {
-    Logger.error('Streaming proxy error', correlationId, {
-      error: error.message,
-      stack: error.stack,
+      // Accumulate for tracing if needed
+      if (shouldTrace) {
+        streamBuffer += chunkStr;
+      }
+
+      // TEMPORARY DEBUG: Log that we're forwarding to client
+      if (process.env.STREAM_DEBUG === 'true') {
+        Logger.info('[STREAM_DEBUG] TO_CLIENT', correlationId, {
+          chunkNum: chunkCount,
+          chunkSize: chunk.length,
+        });
+      }
+
+      // Forward to client immediately (real-time streaming)
+      res.write(chunk);
+    });
+
+    // Handle upstream errors
+    response.data.on('error', (error: Error) => {
+      Logger.error('Upstream stream error', correlationId, {
+        error: error.message,
+        chunkCount,
+        totalBytes,
+      });
+      // End the response to prevent client from hanging
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
+    // Handle upstream close (may indicate premature termination)
+    response.data.on('close', () => {
+      Logger.info('Upstream stream closed', correlationId, {
+        chunkCount,
+        totalBytes,
+        streamBufferLength: streamBuffer.length,
+      });
+      // Ensure response is ended if stream closes unexpectedly
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
+    response.data.on('end', async () => {
+      Logger.info('Upstream stream ended normally', correlationId, {
+        chunkCount,
+        totalBytes,
+        finishReason: lastFinishReason,
+        lastChunkPreview: lastChunkPreview.substring(0, 100),
+      });
+      res.end();
+
+      // Create traces if needed
+      if (shouldTrace && streamBuffer) {
+        try {
+          const { parseAndAccumulateSSE } = await import('../utils/sse-parser');
+          const { traceStreamingCompletion } = await import(
+            '../utils/async-tracer'
+          );
+
+          Logger.info('Stream completed, starting async trace', correlationId);
+
+          const accumulatedResponse = parseAndAccumulateSSE(
+            streamBuffer,
+            correlationId
+          );
+
+          const chatRequest = req.body as {
+            model: string;
+            messages: Array<{ role: string; content: string }>;
+            temperature?: number;
+            max_tokens?: number;
+            top_p?: number;
+            n?: number;
+            presence_penalty?: number;
+            frequency_penalty?: number;
+          };
+
+          const tracingInput = {
+            model: chatRequest.model || 'unknown',
+            messages: chatRequest.messages || [],
+            temperature: chatRequest.temperature,
+            max_tokens: chatRequest.max_tokens,
+            top_p: chatRequest.top_p,
+            n: chatRequest.n,
+            presence_penalty: chatRequest.presence_penalty,
+            frequency_penalty: chatRequest.frequency_penalty,
+            correlationId,
+          };
+
+          await traceStreamingCompletion(
+            tracingInput,
+            accumulatedResponse,
+            correlationId,
+            hasWeaveData,
+            hasLangfuseData
+          );
+        } catch (error) {
+          Logger.error('Async streaming trace failed', correlationId, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    });
+
+    // Handle client disconnect (e.g., user cancels request)
+    req.on('close', () => {
+      Logger.info('Client connection closed', correlationId, {
+        chunkCount,
+        totalBytes,
+        aborted: req.destroyed,
+      });
+      // Destroy the response stream if client disconnected
+      if (response.data && !response.data.destroyed) {
+        response.data.destroy();
+      }
+    });
+
+    // Handle response errors (client-side issues)
+    res.on('error', (error: Error) => {
+      Logger.error('Response stream error', correlationId, {
+        error: error.message,
+        chunkCount,
+        totalBytes,
+      });
+    });
+  } catch (error) {
+    Logger.error('Streaming proxy request error', correlationId, {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      chunkCount,
+      totalBytes,
     });
     if (!res.headersSent) {
       res.status(502).json({
@@ -146,14 +337,7 @@ function handleStreamingRequest(
         },
       });
     }
-  });
-
-  // Forward the request body for POST requests
-  if (req.method === 'POST' && req.body) {
-    proxyReq.write(JSON.stringify(req.body));
   }
-
-  proxyReq.end();
 }
 
 /**
@@ -177,13 +361,19 @@ export async function v1ProxyHandler(
     const isStreamingRequest = req.body && req.body.stream === true;
 
     if (isStreamingRequest) {
-      // For streaming requests, use direct HTTP proxy to maintain stream
-      handleStreamingRequest(req, res, correlationId);
+      // For streaming requests, use axios-based streaming (same as balance injection)
+      await handleStreamingRequest(req, res, correlationId);
       return;
     }
 
     // For non-streaming requests, use the existing ProxyService
     const fullPath = `/api/v1${req.path}`;
+
+    // Inject Anthropic provider routing for Claude models to avoid Google Vertex truncation issues
+    if (req.body) {
+      req.body = injectAnthropicProvider(req.body, correlationId);
+    }
+
     const openRouterRequest = createOpenRouterRequest(
       req,
       fullPath,

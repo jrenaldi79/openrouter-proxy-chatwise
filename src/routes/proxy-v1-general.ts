@@ -6,7 +6,7 @@ import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import https from 'https';
 import { proxyService } from '../config/services';
-import { envConfig } from '../config/environment';
+import { envConfig, isStreamDebugEnabled } from '../config/environment';
 import { Logger } from '../utils/logger';
 import { isWeaveEnabled } from '../config/weave';
 import { createTracedLLMCall } from '../middleware/weave-tracing';
@@ -168,8 +168,8 @@ async function handleStreamingRequest(
               // Capture last chunk preview for debugging
               lastChunkPreview = jsonStr.substring(0, 200);
 
-              // TEMPORARY DEBUG: Log detailed stream data for comparison
-              if (process.env.STREAM_DEBUG === 'true') {
+              // DEBUG: Log detailed stream data for comparison (disabled in production)
+              if (isStreamDebugEnabled()) {
                 const delta = parsed.choices?.[0]?.delta || {};
                 const deltaKeys = Object.keys(delta);
                 Logger.info('[STREAM_DEBUG] FROM_OPENROUTER', correlationId, {
@@ -200,8 +200,8 @@ async function handleStreamingRequest(
         streamBuffer += chunkStr;
       }
 
-      // TEMPORARY DEBUG: Log that we're forwarding to client
-      if (process.env.STREAM_DEBUG === 'true') {
+      // DEBUG: Log that we're forwarding to client (disabled in production)
+      if (isStreamDebugEnabled()) {
         Logger.info('[STREAM_DEBUG] TO_CLIENT', correlationId, {
           chunkNum: chunkCount,
           chunkSize: chunk.length,

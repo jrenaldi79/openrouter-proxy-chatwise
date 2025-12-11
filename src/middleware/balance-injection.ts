@@ -10,7 +10,7 @@ import { OpenRouterRequest } from '../models/OpenRouterRequest';
 import { ChatCompletionRequest } from '../services/BalanceInjectionService';
 import { Logger } from '../utils/logger';
 import { balanceInjectionService } from '../config/services';
-import { envConfig } from '../config/environment';
+import { envConfig, isStreamDebugEnabled } from '../config/environment';
 import { isWeaveEnabled } from '../config/weave';
 import { isLangfuseEnabled } from '../config/langfuse';
 import { parseAndAccumulateSSE } from '../utils/sse-parser';
@@ -306,8 +306,8 @@ export async function balanceInjectionMiddleware(
             `"id":"${chatId}"`
           );
 
-          // TEMPORARY DEBUG: Log detailed stream data for comparison
-          if (process.env.STREAM_DEBUG === 'true' && event.startsWith('data: {')) {
+          // DEBUG: Log detailed stream data for comparison (disabled in production)
+          if (isStreamDebugEnabled() && event.startsWith('data: {')) {
             try {
               const debugJson = JSON.parse(event.substring(6));
               const delta = debugJson.choices?.[0]?.delta || {};
@@ -367,8 +367,8 @@ export async function balanceInjectionMiddleware(
             }
           }
 
-          // TEMPORARY DEBUG: Log what we're sending to client
-          if (process.env.STREAM_DEBUG === 'true' && modifiedEvent.startsWith('data: {')) {
+          // DEBUG: Log what we're sending to client (disabled in production)
+          if (isStreamDebugEnabled() && modifiedEvent.startsWith('data: {')) {
             try {
               const debugJson = JSON.parse(modifiedEvent.substring(6));
               const delta = debugJson.choices?.[0]?.delta || {};

@@ -90,3 +90,15 @@ export function loadEnvironmentConfig(): EnvironmentConfig {
 
 // Export singleton instance
 export const envConfig = loadEnvironmentConfig();
+
+/**
+ * Check if stream debug logging is enabled.
+ * IMPORTANT: Stream debug is ONLY allowed in non-production environments
+ * to prevent accidental logging of sensitive message content.
+ */
+export function isStreamDebugEnabled(): boolean {
+  return (
+    process.env.STREAM_DEBUG === 'true' &&
+    process.env.NODE_ENV !== 'production'
+  );
+}

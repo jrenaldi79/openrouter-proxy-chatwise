@@ -88,7 +88,9 @@ async function handleStreamingRequest(
   const proxyHeaders = filterHeadersForUpstream(req.headers, targetHost);
 
   // Inject Anthropic provider routing for Claude models to avoid Google Vertex truncation issues
-  const modifiedBody = req.body ? injectAnthropicProvider(req.body, correlationId) : req.body;
+  const modifiedBody = req.body
+    ? injectAnthropicProvider(req.body, correlationId)
+    : req.body;
 
   // Pre-calculate body size for logging
   const bodyString = modifiedBody ? JSON.stringify(modifiedBody) : '';

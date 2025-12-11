@@ -98,7 +98,6 @@ export const envConfig = loadEnvironmentConfig();
  */
 export function isStreamDebugEnabled(): boolean {
   return (
-    process.env.STREAM_DEBUG === 'true' &&
-    process.env.NODE_ENV !== 'production'
+    process.env.STREAM_DEBUG === 'true' && process.env.NODE_ENV !== 'production'
   );
 }

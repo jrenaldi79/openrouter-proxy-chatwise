@@ -17,10 +17,7 @@ export function isAnthropicModel(model: string | undefined): boolean {
   if (!model) return false;
 
   const lowerModel = model.toLowerCase();
-  return (
-    lowerModel.startsWith('anthropic/') ||
-    lowerModel.includes('claude')
-  );
+  return lowerModel.startsWith('anthropic/') || lowerModel.includes('claude');
 }
 
 /**
@@ -38,10 +35,9 @@ export const ANTHROPIC_PROVIDER_CONFIG = {
  * @param correlationId - Request correlation ID for logging
  * @returns Modified body with provider routing, or original body if not applicable
  */
-export function injectAnthropicProvider<T extends { model?: string; provider?: unknown }>(
-  body: T,
-  correlationId?: string
-): T {
+export function injectAnthropicProvider<
+  T extends { model?: string; provider?: unknown },
+>(body: T, correlationId?: string): T {
   // Skip if no model specified
   if (!body?.model) {
     return body;
@@ -54,11 +50,10 @@ export function injectAnthropicProvider<T extends { model?: string; provider?: u
 
   // Skip if provider is already explicitly set
   if (body.provider) {
-    Logger.debug(
-      'Provider already set, skipping injection',
-      correlationId,
-      { model: body.model, existingProvider: body.provider }
-    );
+    Logger.debug('Provider already set, skipping injection', correlationId, {
+      model: body.model,
+      existingProvider: body.provider,
+    });
     return body;
   }
 

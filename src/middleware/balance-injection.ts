@@ -160,7 +160,10 @@ export async function balanceInjectionMiddleware(
       );
 
       // Inject Anthropic provider routing for Claude models to avoid Google Vertex truncation issues
-      const modifiedChatRequest = injectAnthropicProvider(chatRequest, correlationId);
+      const modifiedChatRequest = injectAnthropicProvider(
+        chatRequest,
+        correlationId
+      );
 
       const openRouterRequest = OpenRouterRequest.fromProxyRequest(
         {
@@ -323,7 +326,9 @@ export async function balanceInjectionMiddleware(
                 thinkingDeltaPreview: delta.thinking_delta?.substring(0, 100),
                 // Check for reasoning field (some providers use this)
                 hasReasoning: !!(delta as Record<string, unknown>).reasoning,
-                reasoningPreview: ((delta as Record<string, unknown>).reasoning as string)?.substring(0, 100),
+                reasoningPreview: (
+                  (delta as Record<string, unknown>).reasoning as string
+                )?.substring(0, 100),
                 finishReason,
                 role: delta.role,
               });

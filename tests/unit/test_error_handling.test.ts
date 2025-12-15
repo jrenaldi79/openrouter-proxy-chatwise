@@ -2,15 +2,21 @@ import request from 'supertest';
 import { Express } from 'express';
 import nock from 'nock';
 import { createApp } from '../../src/app';
+import { ensureModelsMock } from '../setup';
 
 describe('Error Propagation Unit Tests', () => {
   let app: Express;
 
   beforeAll(async () => {
+    // Ensure models mock exists before createApp() triggers modelDataService.fetchModels()
+    ensureModelsMock();
     app = await createApp();
+    // Wait for the async model fetch to complete to avoid race conditions
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   beforeEach(() => {
+    // Clear test-specific mocks - this test sets up its own specific mocks
     nock.cleanAll();
   });
 

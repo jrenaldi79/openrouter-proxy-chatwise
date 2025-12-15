@@ -13,7 +13,7 @@ describe('Context Warning', () => {
 
     it('should generate info message for 25% usage', () => {
       const warning = generateContextWarning('info', 100000, 400000);
-      expect(warning).toContain('📊 Context:');
+      expect(warning).toContain('📊 Context Window:');
       expect(warning).toContain('25%');
       expect(warning).toContain('100k/400k tokens');
       expect(warning).toContain('Your conversation is getting long');
@@ -21,7 +21,7 @@ describe('Context Warning', () => {
 
     it('should generate warning message for 40% usage', () => {
       const warning = generateContextWarning('warning', 160000, 400000);
-      expect(warning).toContain('⚠️ Context:');
+      expect(warning).toContain('⚠️ Context Window:');
       expect(warning).toContain('40%');
       expect(warning).toContain('160k/400k tokens');
       expect(warning).toContain('Consider summarizing');
@@ -30,7 +30,7 @@ describe('Context Warning', () => {
 
     it('should generate critical message for 50% usage', () => {
       const warning = generateContextWarning('critical', 200000, 400000);
-      expect(warning).toContain('🚨 Context:');
+      expect(warning).toContain('🚨 Context Window:');
       expect(warning).toContain('50%');
       expect(warning).toContain('200k/400k tokens');
       expect(warning).toContain('Approaching limit');
@@ -130,7 +130,7 @@ describe('Context Warning', () => {
       if (warning) {
         const chunk = createWarningSSEChunk(warning);
         expect(chunk).toContain('data: {');
-        expect(chunk).toContain('⚠️ Context:');
+        expect(chunk).toContain('⚠️ Context Window:');
         expect(chunk).toContain('40%');
       }
     });

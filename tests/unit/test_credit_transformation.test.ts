@@ -2,11 +2,14 @@ import request from 'supertest';
 import { Express } from 'express';
 import nock from 'nock';
 import { createApp } from '../../src/app';
+import { ensureModelsMock } from '../setup';
 
 describe('Credit Transformation Contract Tests', () => {
   let app: Express;
 
   beforeAll(async () => {
+    // Ensure models mock exists before createApp() triggers modelDataService.fetchModels()
+    ensureModelsMock();
     app = await createApp();
   });
 

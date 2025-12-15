@@ -1,11 +1,14 @@
 import request from 'supertest';
 import { Express } from 'express';
 import { createApp } from '../../src/app';
+import { ensureModelsMock } from '../setup';
 
 describe('Health Check Contract Tests', () => {
   let app: Express;
 
   beforeAll(async () => {
+    // Ensure models mock exists before createApp() triggers modelDataService.fetchModels()
+    ensureModelsMock();
     app = await createApp();
   });
 

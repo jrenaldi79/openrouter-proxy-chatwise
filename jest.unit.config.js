@@ -29,7 +29,7 @@ module.exports = {
 
   // Performance settings for local development
   testTimeout: 10000, // Shorter timeout for mocked tests
-  maxWorkers: '50%', // Parallel execution for faster unit tests
+  maxWorkers: 1, // Sequential execution to prevent nock mock interference between tests
 
   // Clear mocks between tests
   clearMocks: true,
@@ -41,7 +41,8 @@ module.exports = {
     '^.+\\.ts$': 'ts-jest'
   },
 
-  // Setup file for unit tests (if needed)
+  // Setup files - setup-env.ts runs FIRST to set env vars before any imports
+  setupFiles: ['<rootDir>/tests/setup-env.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
 
   verbose: true,

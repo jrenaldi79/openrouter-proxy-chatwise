@@ -2,20 +2,32 @@ import request from 'supertest';
 import { Express } from 'express';
 import nock from 'nock';
 import { createApp } from '../../src/app';
+import { ensureModelsMock } from '../setup';
 
 describe('Endpoint Routing and Path Transformation Unit Tests', () => {
   let app: Express;
 
   beforeAll(async () => {
+    // Ensure models mock exists before createApp() triggers modelDataService.fetchModels()
+    ensureModelsMock();
     app = await createApp();
+    // Wait for the async model fetch to complete to avoid race conditions
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   beforeEach(() => {
+    // Clear test-specific mocks - this test sets up its own specific mocks
     nock.cleanAll();
   });
 
   afterEach(() => {
-    nock.isDone();
+    // Verify test-specific mocks were consumed (except the persistent models mock)
+    const pending = nock
+      .pendingMocks()
+      .filter(mock => !mock.includes('/api/v1/models'));
+    if (pending.length > 0) {
+      console.warn('Unconsumed mocks:', pending);
+    }
   });
 
   describe('Path Transformation Logic', () => {
@@ -84,8 +96,9 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
     });
 
     it('should handle /v1/models path transformation', async () => {
+      // Set up a test-specific mock for models
       const openRouterMock = nock('https://openrouter.ai')
-        .get('/api/v1/models') // Should transform /v1/models to /api/v1/models
+        .get('/api/v1/models')
         .matchHeader('authorization', validApiKey)
         .reply(200, {
           data: [
@@ -99,9 +112,9 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
         .set('Authorization', validApiKey)
         .expect(200);
 
+      // Verify response
       expect(response.body.data).toHaveLength(2);
       expect(response.body.data[0]).toHaveProperty('id');
-
       expect(openRouterMock.isDone()).toBe(true);
     });
 
@@ -262,6 +275,7 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
     });
 
     it('should skip helmet middleware for models endpoint', async () => {
+      // Set up a test-specific mock for models
       const openRouterMock = nock('https://openrouter.ai')
         .get('/api/v1/models')
         .matchHeader('authorization', validApiKey)
@@ -274,13 +288,14 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
 
       // Should NOT have helmet security headers
       expect(response.headers['x-content-type-options']).toBeUndefined();
-
+      expect(response.body.data).toBeDefined();
       expect(openRouterMock.isDone()).toBe(true);
     });
 
     it('should skip helmet middleware for chat completions', async () => {
+      // Use body matcher function to accept any body (proxy may modify it)
       const openRouterMock = nock('https://openrouter.ai')
-        .post('/api/v1/chat/completions')
+        .post('/api/v1/chat/completions', () => true) // Accept any body
         .matchHeader('authorization', validApiKey)
         .reply(200, { id: 'chat-123' });
 
@@ -331,19 +346,29 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
     });
 
     it('should handle routing errors without hanging', async () => {
-      // This test ensures middleware skip logic uses return next() not return
+      // This test ensures the proxy doesn't hang on invalid requests
+      // The proxy forwards requests to OpenRouter which validates the API key
       const startTime = Date.now();
+
+      // Mock OpenRouter to return 401 for invalid API key
+      const openRouterMock = nock('https://openrouter.ai')
+        .get('/api/v1/auth/key')
+        .matchHeader('authorization', invalidApiKey)
+        .reply(401, {
+          error: { code: 'UNAUTHORIZED', message: 'Invalid API key' },
+        });
 
       const response = await request(app)
         .get('/v1/auth/key')
         .set('Authorization', invalidApiKey)
-        .expect(401);
+        .expect(401); // OpenRouter returns 401, proxy maps to UPSTREAM_ERROR with 401
 
       const responseTime = Date.now() - startTime;
 
       // Should respond quickly, not hang
       expect(responseTime).toBeLessThan(1000);
       expect(response.body.error).toHaveProperty('code');
+      expect(openRouterMock.isDone()).toBe(true);
     });
 
     it('should handle OpenRouter errors in path transformation', async () => {
@@ -392,8 +417,18 @@ describe('Endpoint Routing and Path Transformation Unit Tests', () => {
         temperature: 0.7,
       };
 
+      // Use body matcher that verifies essential fields are present
+      // (proxy may add fields like provider routing)
       const openRouterMock = nock('https://openrouter.ai')
-        .post('/api/v1/chat/completions', requestBody) // Body should be forwarded
+        .post('/api/v1/chat/completions', (body: Record<string, unknown>) => {
+          // Verify the essential request body fields are forwarded
+          return (
+            body.model === 'gpt-3.5-turbo' &&
+            body.temperature === 0.7 &&
+            Array.isArray(body.messages) &&
+            body.messages.length === 1
+          );
+        })
         .matchHeader('authorization', validApiKey)
         .reply(200, { id: 'chat-123' });
 

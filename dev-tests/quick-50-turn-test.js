@@ -18,7 +18,7 @@ axios.post('http://localhost:3000/v1/chat/completions', {
   max_tokens: 20,
 }, {
   headers: {
-    'Authorization': 'Bearer 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',
+    'Authorization': `Bearer ${process.env.OPENROUTER_TEST_API_KEY || 'sk-or-v1-your-test-key-here'}`,
     'Content-Type': 'application/json',
   },
   responseType: 'stream',

@@ -5,7 +5,7 @@
 const axios = require('axios');
 
 const PROXY_URL = 'http://localhost:3000';
-const API_KEY = process.env.OPENROUTER_TEST_API_KEY || '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';
+const API_KEY = process.env.OPENROUTER_TEST_API_KEY || 'sk-or-v1-your-test-key-here';
 
 async function checkModelLimit() {
   console.log('\n🔍 Checking Model Limit Configuration\n');

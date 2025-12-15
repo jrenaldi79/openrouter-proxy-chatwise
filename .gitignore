@@ -74,3 +74,5 @@ specs/
 openrouter-proxy-spec.md
 *.md
 !README.md
+!SECURITY_SCANNING.md
+!CLAUDE.md

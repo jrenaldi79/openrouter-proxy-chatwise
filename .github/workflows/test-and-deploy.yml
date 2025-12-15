@@ -23,6 +23,17 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Scan for exposed secrets
+      run: |
+        echo "🔍 Scanning for hardcoded secrets..."
+        # Fail if any of these patterns are found in staged files
+        if git diff HEAD --cached | grep -E 'sk-or-v1-[a-zA-Z0-9]{64}|sk-lf-[a-zA-Z0-9]{32}|pk-lf-[a-zA-Z0-9]{32}|Bearer sk-or-v1-'; then
+          echo "❌ SECURITY ALERT: Exposed secrets detected in commit!"
+          exit 1
+        else
+          echo "✅ No exposed secrets detected"
+        fi
+
     - name: Run linting
       run: npm run lint
 

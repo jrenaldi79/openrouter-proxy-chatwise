@@ -16,6 +16,48 @@ These scripts typically require:
 2. Proper environment variables configured (`.env` file)
 3. Manual execution via `node dev-tests/script-name.js`
 
+## ⚠️ Security: Never Hardcode API Keys
+
+All scripts must use environment variables for API keys. **NEVER commit hardcoded secrets.**
+
+### Setting Environment Variables
+
+**Option 1: One-off execution**
+```bash
+OPENROUTER_TEST_API_KEY="sk-or-v1-..." node dev-tests/test-weave-chat.js
+```
+
+**Option 2: Temporary session**
+```bash
+export OPENROUTER_TEST_API_KEY="sk-or-v1-..."
+node dev-tests/test-weave-chat.js
+unset OPENROUTER_TEST_API_KEY
+```
+
+**Option 3: Persistent .env.local (gitignored)**
+```bash
+# Create .env.local (NOT committed)
+OPENROUTER_TEST_API_KEY=sk-or-v1-...
+WANDB_API_KEY=...
+WEAVE_PROJECT_NAME=...
+
+# Load before running
+source .env.local
+node dev-tests/test-weave-chat.js
+```
+
+### Pre-Commit Secret Scanning
+
+A Git hook automatically prevents commits with exposed secrets:
+- Blocks commits containing: `sk-or-v1-[64-char-hex]`
+- Blocks commits containing: `Bearer sk-or-v1-`
+- Blocks commits containing: `sk-lf-`, `pk-lf-` (Langfuse)
+
+If you accidentally try to commit a secret, the hook will reject it with:
+```
+⚠️  COMMIT BLOCKED: Exposed secrets detected!
+```
+
 ## Current Scripts
 
 ### `test-weave-chat.js`

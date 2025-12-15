@@ -156,23 +156,28 @@ export class BalanceInjectionService {
         if (apiData.data) {
           const keyResponse = KeyResponse.fromApiResponse(apiData.data);
           const remainingCredits = keyResponse.getRemainingCredits();
+          // Use effective usage (byok_usage for BYOK accounts, regular usage otherwise)
+          const effectiveUsage = keyResponse.getEffectiveUsage();
 
           Logger.balanceDebug('Balance parsing successful', correlationId, {
             remainingCredits,
             usage: keyResponse.usage,
+            byok_usage: keyResponse.byok_usage,
+            effectiveUsage,
+            isByokAccount: keyResponse.isByokAccount(),
           });
 
           if (remainingCredits !== null) {
             return {
               totalCredits: remainingCredits,
-              usedCredits: keyResponse.usage,
+              usedCredits: effectiveUsage,
             };
           }
 
           // Handle unlimited accounts
           return {
             totalCredits: -1, // Indicates unlimited
-            usedCredits: keyResponse.usage,
+            usedCredits: effectiveUsage,
           };
         }
       }
@@ -208,11 +213,16 @@ export class BalanceInjectionService {
     balance: { totalCredits: number; usedCredits: number }
   ): StreamingChunk {
     const usedDollars = this.creditsToDollars(balance.usedCredits);
+    const remainingDollars = this.creditsToDollars(balance.totalCredits);
+    // Calculate limit from remaining + used
+    const limitDollars = this.creditsToDollars(
+      balance.totalCredits + balance.usedCredits
+    );
 
     const balanceText =
       balance.totalCredits === -1
         ? `💰 Account: Unlimited credits ($${usedDollars} used)`
-        : `💰 Balance: $${this.creditsToDollars(balance.totalCredits)} remaining ($${usedDollars} used)`;
+        : `💰 Balance: $${remainingDollars} remaining of $${limitDollars} limit ($${usedDollars} used)`;
 
     return {
       id: chatId,

@@ -12,7 +12,7 @@ describe('Credit Transformation Contract Tests', () => {
 
   beforeEach(() => {
     // Clear any existing nock interceptors
-    nock.cleanAll();
+    cleanTestMocks();
   });
 
   afterEach(() => {
@@ -237,6 +237,142 @@ describe('Credit Transformation Contract Tests', () => {
 
       // Should be under 200ms (excluding OpenRouter latency)
       expect(responseTime).toBeLessThan(200);
+      expect(openRouterMock.isDone()).toBe(true);
+    });
+  });
+
+  describe('BYOK (Bring Your Own Key) credit transformation', () => {
+    const validApiKey = 'Bearer sk-or-v1-test-key-123';
+
+    it('should use byok_usage for pure BYOK accounts (usage=0, byok_usage>0)', async () => {
+      // Mock OpenRouter response for pure BYOK account
+      const openRouterKeyResponse = {
+        data: {
+          limit: null, // Unlimited
+          usage: 0, // No OpenRouter credits used
+          byok_usage: 125.75, // BYOK usage tracked separately
+        },
+      };
+
+      const openRouterMock = nock('https://openrouter.ai')
+        .get('/api/v1/key')
+        .matchHeader('authorization', validApiKey)
+        .reply(200, openRouterKeyResponse);
+
+      const response = await request(app)
+        .get('/api/v1/me/credits')
+        .set('Authorization', validApiKey)
+        .expect(200);
+
+      // Should show BYOK usage as total_usage
+      expect(response.body.data.total_credits).toBe(999999); // Unlimited
+      expect(response.body.data.total_usage).toBe(125.75); // BYOK usage
+
+      expect(openRouterMock.isDone()).toBe(true);
+    });
+
+    it('should use regular usage for non-BYOK accounts', async () => {
+      // Regular prepaid account
+      const openRouterKeyResponse = {
+        data: {
+          limit: 100,
+          usage: 45.5,
+          // No byok_usage field
+        },
+      };
+
+      const openRouterMock = nock('https://openrouter.ai')
+        .get('/api/v1/key')
+        .matchHeader('authorization', validApiKey)
+        .reply(200, openRouterKeyResponse);
+
+      const response = await request(app)
+        .get('/api/v1/me/credits')
+        .set('Authorization', validApiKey)
+        .expect(200);
+
+      expect(response.body.data.total_credits).toBe(100);
+      expect(response.body.data.total_usage).toBe(45.5);
+
+      expect(openRouterMock.isDone()).toBe(true);
+    });
+
+    it('should use regular usage for mixed accounts (both usage and byok_usage)', async () => {
+      // Account using both prepaid credits AND BYOK
+      const openRouterKeyResponse = {
+        data: {
+          limit: 200,
+          usage: 75, // Some OpenRouter credits used
+          byok_usage: 50, // Some BYOK usage
+        },
+      };
+
+      const openRouterMock = nock('https://openrouter.ai')
+        .get('/api/v1/key')
+        .matchHeader('authorization', validApiKey)
+        .reply(200, openRouterKeyResponse);
+
+      const response = await request(app)
+        .get('/api/v1/me/credits')
+        .set('Authorization', validApiKey)
+        .expect(200);
+
+      // When usage > 0, should show regular usage (not BYOK)
+      expect(response.body.data.total_credits).toBe(200);
+      expect(response.body.data.total_usage).toBe(75);
+
+      expect(openRouterMock.isDone()).toBe(true);
+    });
+
+    it('should handle BYOK account with credit limit', async () => {
+      // BYOK user with limited credits (rare but possible)
+      const openRouterKeyResponse = {
+        data: {
+          limit: 500,
+          usage: 0,
+          byok_usage: 234.56,
+        },
+      };
+
+      const openRouterMock = nock('https://openrouter.ai')
+        .get('/api/v1/key')
+        .matchHeader('authorization', validApiKey)
+        .reply(200, openRouterKeyResponse);
+
+      const response = await request(app)
+        .get('/api/v1/me/credits')
+        .set('Authorization', validApiKey)
+        .expect(200);
+
+      expect(response.body.data.total_credits).toBe(500);
+      expect(response.body.data.total_usage).toBe(234.56); // BYOK usage
+
+      expect(openRouterMock.isDone()).toBe(true);
+    });
+
+    it('should return 0 usage when both usage and byok_usage are 0', async () => {
+      // New account with no usage at all
+      const openRouterKeyResponse = {
+        data: {
+          limit: 100,
+          usage: 0,
+          byok_usage: 0,
+        },
+      };
+
+      const openRouterMock = nock('https://openrouter.ai')
+        .get('/api/v1/key')
+        .matchHeader('authorization', validApiKey)
+        .reply(200, openRouterKeyResponse);
+
+      const response = await request(app)
+        .get('/api/v1/me/credits')
+        .set('Authorization', validApiKey)
+        .expect(200);
+
+      expect(response.body.data.total_credits).toBe(100);
+      expect(response.body.data.total_usage).toBe(0);
+
       expect(openRouterMock.isDone()).toBe(true);
     });
   });

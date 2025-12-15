@@ -109,7 +109,7 @@ export class CreditResponse {
   }
 
   public static fromKeyResponse(
-    keyResponse: { limit: number | null; usage: number },
+    keyResponse: { limit: number | null; usage: number; byok_usage?: number },
     correlationId?: string,
     preservedHeaders?: Record<string, string>
   ): CreditResponse {
@@ -118,8 +118,13 @@ export class CreditResponse {
     const total_credits =
       keyResponse.limit === null ? 999999 : keyResponse.limit;
 
-    // Map usage field to total_usage
-    const total_usage = keyResponse.usage;
+    // Determine effective usage:
+    // For BYOK accounts (byok_usage > 0 and either usage is negligible or byok > usage): use byok_usage
+    // Otherwise: use regular usage
+    const byokUsage = keyResponse.byok_usage ?? 0;
+    const isByokAccount =
+      byokUsage > 0 && (keyResponse.usage < 0.01 || byokUsage > keyResponse.usage);
+    const total_usage = isByokAccount ? byokUsage : keyResponse.usage;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -201,6 +206,7 @@ export class CreditResponse {
   public static validateKeyResponseData(data: unknown): {
     limit: number | null;
     usage: number;
+    byok_usage?: number;
   } {
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid key response data: not an object');
@@ -229,9 +235,22 @@ export class CreditResponse {
       throw new Error('Invalid value: limit must be non-negative');
     }
 
+    // Validate byok_usage field (optional, for BYOK accounts)
+    let byok_usage: number | undefined;
+    if ('byok_usage' in keyData && keyData.byok_usage !== undefined) {
+      if (typeof keyData.byok_usage !== 'number') {
+        throw new Error('Invalid data type: byok_usage must be a number');
+      }
+      if (keyData.byok_usage < 0) {
+        throw new Error('Invalid value: byok_usage must be non-negative');
+      }
+      byok_usage = keyData.byok_usage;
+    }
+
     return {
       limit: keyData.limit as number | null,
       usage: keyData.usage as number,
+      byok_usage,
     };
   }
 }

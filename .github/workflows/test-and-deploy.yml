@@ -87,12 +87,14 @@ jobs:
 
     - name: Deploy to Staging
       id: deploy
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
         gcloud run deploy openrouter-proxy-staging \
           --source . \
           --region us-central1 \
           --allow-unauthenticated \
-          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=staging,NODE_TLS_REJECT_UNAUTHORIZED=0 \
+          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=staging,NODE_TLS_REJECT_UNAUTHORIZED=0,OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
           --memory 256Mi \
           --timeout 300 \
           --min-instances 0 \
@@ -187,12 +189,14 @@ jobs:
 
     - name: Deploy to Production
       id: deploy-prod
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
         gcloud run deploy openrouter-proxy \
           --source . \
           --region us-central1 \
           --allow-unauthenticated \
-          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=production,NODE_TLS_REJECT_UNAUTHORIZED=0 \
+          --set-env-vars OPENROUTER_BASE_URL=https://openrouter.ai,NODE_ENV=production,NODE_TLS_REJECT_UNAUTHORIZED=0,OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
           --memory 512Mi \
           --timeout 300 \
           --min-instances 1 \

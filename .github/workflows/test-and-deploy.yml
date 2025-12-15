@@ -88,7 +88,7 @@ jobs:
     - name: Deploy to Staging
       id: deploy
       env:
-        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TEST_API_KEY }}
       run: |
         gcloud run deploy openrouter-proxy-staging \
           --source . \
@@ -190,7 +190,7 @@ jobs:
     - name: Deploy to Production
       id: deploy-prod
       env:
-        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TEST_API_KEY }}
       run: |
         gcloud run deploy openrouter-proxy \
           --source . \

@@ -11,6 +11,7 @@ const express_1 = __importDefault(require("express"));
 const environment_1 = require("./config/environment");
 const weave_1 = require("./config/weave");
 const langfuse_1 = require("./config/langfuse");
+const services_1 = require("./config/services");
 const security_1 = require("./middleware/security");
 const parsing_1 = require("./middleware/parsing");
 const correlation_1 = require("./middleware/correlation");
@@ -28,6 +29,7 @@ async function createApp() {
     const app = (0, express_1.default)();
     await (0, weave_1.initializeWeave)();
     await (0, langfuse_1.initializeLangfuse)();
+    void services_1.modelDataService.fetchModels();
     (0, security_1.applySecurity)(app);
     (0, parsing_1.applyBodyParsing)(app);
     app.use(correlation_1.correlationMiddleware);

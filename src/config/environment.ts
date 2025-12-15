@@ -9,6 +9,7 @@ export interface EnvironmentConfig {
 
   // OpenRouter API Configuration
   OPENROUTER_BASE_URL: string;
+  OPENROUTER_API_KEY?: string; // Optional API key for server-side operations (fetching model data)
   REQUEST_TIMEOUT_MS: number;
 
   // Rate Limiting Configuration
@@ -47,6 +48,7 @@ export function loadEnvironmentConfig(): EnvironmentConfig {
     // OpenRouter API Configuration
     OPENROUTER_BASE_URL:
       process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai',
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY, // Optional for server-side model data fetching
     REQUEST_TIMEOUT_MS: process.env.REQUEST_TIMEOUT_MS
       ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
       : 30000,

@@ -2,11 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.envConfig = void 0;
 exports.loadEnvironmentConfig = loadEnvironmentConfig;
+exports.isStreamDebugEnabled = isStreamDebugEnabled;
 function loadEnvironmentConfig() {
     return {
         PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
         NODE_ENV: process.env.NODE_ENV || 'development',
         OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai',
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
         REQUEST_TIMEOUT_MS: process.env.REQUEST_TIMEOUT_MS
             ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
             : 30000,
@@ -34,4 +36,7 @@ function loadEnvironmentConfig() {
     };
 }
 exports.envConfig = loadEnvironmentConfig();
+function isStreamDebugEnabled() {
+    return (process.env.STREAM_DEBUG === 'true' && process.env.NODE_ENV !== 'production');
+}
 //# sourceMappingURL=environment.js.map

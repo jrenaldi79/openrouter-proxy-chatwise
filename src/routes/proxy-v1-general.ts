@@ -20,6 +20,11 @@ import {
 } from './proxy-utils';
 import { injectAnthropicProvider } from '../utils/provider-routing';
 import { withRetry, DEFAULT_RETRY_CONFIG } from '../utils/retry';
+import { getModelLimits, getWarningLevel } from '../config/model-limits';
+import {
+  generateContextWarning,
+  createWarningSSEChunk,
+} from '../utils/context-warning';
 
 /**
  * Problematic headers that should be filtered out for upstream requests
@@ -109,7 +114,14 @@ async function handleStreamingRequest(
   const hasLangfuseData = (req as any).hasLangfuseData || false;
   const shouldTrace = hasWeaveData || hasLangfuseData;
 
-  // Stream accumulation for tracing
+  // DEBUG: Log tracing flags
+  Logger.info('Tracing flags check', correlationId, {
+    hasWeaveData,
+    hasLangfuseData,
+    shouldTrace,
+  });
+
+  // Stream accumulation for tracing AND context warnings (always accumulate)
   let streamBuffer = '';
 
   // Track stream statistics for debugging
@@ -204,10 +216,9 @@ async function handleStreamingRequest(
         // Ignore parse errors - chunks may be partial
       }
 
-      // Accumulate for tracing if needed
-      if (shouldTrace) {
-        streamBuffer += chunkStr;
-      }
+      // ALWAYS accumulate stream buffer for context warnings and tracing
+      // (Context warnings need token usage data from the stream)
+      streamBuffer += chunkStr;
 
       // DEBUG: Log that we're forwarding to client (disabled in production)
       if (isStreamDebugEnabled()) {
@@ -241,10 +252,8 @@ async function handleStreamingRequest(
         totalBytes,
         streamBufferLength: streamBuffer.length,
       });
-      // Ensure response is ended if stream closes unexpectedly
-      if (!res.writableEnded) {
-        res.end();
-      }
+      // NOTE: Do NOT call res.end() here - let the 'end' handler do it
+      // so that context warnings can be injected before the response ends
     });
 
     response.data.on('end', async () => {
@@ -254,6 +263,62 @@ async function handleStreamingRequest(
         finishReason: lastFinishReason,
         lastChunkPreview: lastChunkPreview.substring(0, 100),
       });
+
+      // Check if context warning is needed
+      if (streamBuffer && req.body?.model) {
+        try {
+          const { parseAndAccumulateSSE } = await import('../utils/sse-parser');
+          const accumulated = parseAndAccumulateSSE(streamBuffer, correlationId);
+
+          if (accumulated.usage.promptTokens) {
+            const limits = getModelLimits(req.body.model);
+            const warningLevel = getWarningLevel(
+              accumulated.usage.promptTokens,
+              limits
+            );
+
+            // DEBUG: Log context warning check details
+            Logger.info('Context warning check', correlationId, {
+              model: req.body.model,
+              promptTokens: accumulated.usage.promptTokens,
+              maxTokens: limits.maxContextTokens,
+              warningLevel,
+              percentage: Math.round((accumulated.usage.promptTokens / limits.maxContextTokens) * 100),
+            });
+
+            if (warningLevel !== 'none') {
+              const warningText = generateContextWarning(
+                warningLevel,
+                accumulated.usage.promptTokens,
+                limits.maxContextTokens
+              );
+
+              // DEBUG: Log injection attempt
+              Logger.info('Attempting context warning injection', correlationId, {
+                hasWarningText: !!warningText,
+                resWritableEnded: res.writableEnded,
+                warningLevel,
+              });
+
+              if (warningText && !res.writableEnded) {
+                const warningChunk = createWarningSSEChunk(warningText);
+                res.write(warningChunk);
+                Logger.info('Context warning injected', correlationId, {
+                  level: warningLevel,
+                  promptTokens: accumulated.usage.promptTokens,
+                  maxTokens: limits.maxContextTokens,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          Logger.error('Failed to inject context warning', correlationId, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Don't fail the request if warning injection fails
+        }
+      }
+
       res.end();
 
       // Create traces if needed

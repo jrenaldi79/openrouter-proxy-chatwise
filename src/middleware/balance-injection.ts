@@ -17,6 +17,11 @@ import { parseAndAccumulateSSE } from '../utils/sse-parser';
 import { traceStreamingCompletion } from '../utils/async-tracer';
 import { injectAnthropicProvider } from '../utils/provider-routing';
 import { withRetry, DEFAULT_RETRY_CONFIG } from '../utils/retry';
+import { getModelLimits, getWarningLevel } from '../config/model-limits';
+import {
+  generateContextWarning,
+  createWarningSSEChunk,
+} from '../utils/context-warning';
 
 /**
  * Balance injection middleware for new chat sessions
@@ -400,6 +405,48 @@ export async function balanceInjectionMiddleware(
 
       response.data.on('end', () => {
         Logger.info('Stream ended', correlationId);
+
+        // Check if context warning is needed
+        if (tracingBuffer !== null && chatRequest.model) {
+          try {
+            const accumulated = parseAndAccumulateSSE(
+              tracingBuffer,
+              correlationId
+            );
+
+            if (accumulated.usage.promptTokens) {
+              const limits = getModelLimits(chatRequest.model);
+              const warningLevel = getWarningLevel(
+                accumulated.usage.promptTokens,
+                limits
+              );
+
+              if (warningLevel !== 'none') {
+                const warningText = generateContextWarning(
+                  warningLevel,
+                  accumulated.usage.promptTokens,
+                  limits.maxContextTokens
+                );
+
+                if (warningText && !res.writableEnded) {
+                  const warningChunk = createWarningSSEChunk(warningText);
+                  res.write(warningChunk);
+                  Logger.info('Context warning injected', correlationId, {
+                    level: warningLevel,
+                    promptTokens: accumulated.usage.promptTokens,
+                    maxTokens: limits.maxContextTokens,
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            Logger.error('Failed to inject context warning', correlationId, {
+              error: error instanceof Error ? error.message : String(error),
+            });
+            // Don't fail the request if warning injection fails
+          }
+        }
+
         res.end();
 
         // Async tracing after stream completes (non-blocking)

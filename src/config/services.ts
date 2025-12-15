@@ -4,6 +4,7 @@
 
 import { ProxyService } from '../services/ProxyService';
 import { BalanceInjectionService } from '../services/BalanceInjectionService';
+import { ModelDataService } from '../services/ModelDataService';
 import { envConfig } from './environment';
 
 /**
@@ -26,3 +27,5 @@ export const balanceInjectionService = new BalanceInjectionService(
   envConfig.OPENROUTER_BASE_URL,
   envConfig.REQUEST_TIMEOUT_MS
 );
+
+export const modelDataService = new ModelDataService();

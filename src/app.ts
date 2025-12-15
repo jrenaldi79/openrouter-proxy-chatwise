@@ -8,6 +8,7 @@ import express, { Express } from 'express';
 import { envConfig } from './config/environment';
 import { initializeWeave } from './config/weave';
 import { initializeLangfuse } from './config/langfuse';
+import { modelDataService } from './config/services';
 
 // Middleware
 import { applySecurity } from './middleware/security';
@@ -37,6 +38,9 @@ export async function createApp(): Promise<Express> {
   // Initialize observability platforms (if configured)
   await initializeWeave();
   await initializeLangfuse();
+
+  // Fetch model data from OpenRouter API (non-blocking, used for dynamic context limits)
+  void modelDataService.fetchModels();
 
   // Apply security middleware (helmet, cors, rate limiting, trust proxy)
   applySecurity(app);

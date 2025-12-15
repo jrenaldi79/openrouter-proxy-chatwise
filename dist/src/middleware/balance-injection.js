@@ -15,6 +15,10 @@ const weave_1 = require("../config/weave");
 const langfuse_1 = require("../config/langfuse");
 const sse_parser_1 = require("../utils/sse-parser");
 const async_tracer_1 = require("../utils/async-tracer");
+const provider_routing_1 = require("../utils/provider-routing");
+const retry_1 = require("../utils/retry");
+const model_limits_1 = require("../config/model-limits");
+const context_warning_1 = require("../utils/context-warning");
 async function balanceInjectionMiddleware(req, res, next) {
     const correlationId = req.correlationId;
     logger_1.Logger.balanceMiddleware(`${req.method} ${req.path} - body:${!!req.body}`, correlationId);
@@ -81,11 +85,12 @@ async function balanceInjectionMiddleware(req, res, next) {
                 ? `/api${req.originalUrl}`
                 : req.originalUrl;
             logger_1.Logger.balanceDebug(`Path mapping: ${req.originalUrl} -> ${openRouterPath}`, correlationId);
+            const modifiedChatRequest = (0, provider_routing_1.injectAnthropicProvider)(chatRequest, correlationId);
             const openRouterRequest = OpenRouterRequest_1.OpenRouterRequest.fromProxyRequest({
                 method: 'POST',
                 path: openRouterPath,
                 headers: req.headers,
-                body: chatRequest,
+                body: modifiedChatRequest,
                 query: req.query,
             }, environment_1.envConfig.OPENROUTER_BASE_URL, environment_1.envConfig.REQUEST_TIMEOUT_MS).withCorrelationId(correlationId);
             logger_1.Logger.balanceDebug('OpenRouter request created', correlationId);
@@ -104,7 +109,7 @@ async function balanceInjectionMiddleware(req, res, next) {
                 }),
             };
             logger_1.Logger.balanceDebug('Making axios request...', correlationId);
-            const response = await (0, axios_1.default)(axiosConfig);
+            const response = await (0, retry_1.withRetry)(() => (0, axios_1.default)(axiosConfig), correlationId, retry_1.DEFAULT_RETRY_CONFIG);
             logger_1.Logger.balanceDebug('Axios response received', correlationId);
             if (response.status !== 200) {
                 logger_1.Logger.balanceError('OpenRouter returned non-200 status - forwarding error to client', correlationId, undefined, { status: response.status });
@@ -158,9 +163,31 @@ async function balanceInjectionMiddleware(req, res, next) {
                 for (const event of events) {
                     if (!event.trim())
                         continue;
-                    logger_1.Logger.balanceEvent(`Checking event: ${event.substring(0, 200)}`, correlationId);
                     let modifiedEvent = event;
                     modifiedEvent = modifiedEvent.replace(/"id":"[^"]+"/g, `"id":"${chatId}"`);
+                    if ((0, environment_1.isStreamDebugEnabled)() && event.startsWith('data: {')) {
+                        try {
+                            const debugJson = JSON.parse(event.substring(6));
+                            const delta = debugJson.choices?.[0]?.delta || {};
+                            const deltaKeys = Object.keys(delta);
+                            const finishReason = debugJson.choices?.[0]?.finish_reason;
+                            logger_1.Logger.info('[STREAM_DEBUG] FROM_OPENROUTER', correlationId, {
+                                deltaKeys,
+                                hasContent: !!delta.content,
+                                contentPreview: delta.content?.substring(0, 100),
+                                hasThinking: !!delta.thinking,
+                                thinkingPreview: delta.thinking?.substring(0, 100),
+                                hasThinkingDelta: !!delta.thinking_delta,
+                                thinkingDeltaPreview: delta.thinking_delta?.substring(0, 100),
+                                hasReasoning: !!delta.reasoning,
+                                reasoningPreview: delta.reasoning?.substring(0, 100),
+                                finishReason,
+                                role: delta.role,
+                            });
+                        }
+                        catch {
+                        }
+                    }
                     if (isFirstContentChunk && event.startsWith('data: {')) {
                         try {
                             const jsonStr = event.substring(6);
@@ -177,9 +204,6 @@ async function balanceInjectionMiddleware(req, res, next) {
                                 isFirstContentChunk = false;
                                 logger_1.Logger.info('Balance injected into first chunk', correlationId);
                             }
-                            else {
-                                logger_1.Logger.info('Skipping event - no content or empty', correlationId);
-                            }
                         }
                         catch (error) {
                             logger_1.Logger.error('Invalid JSON - skipping injection', correlationId, {
@@ -187,12 +211,51 @@ async function balanceInjectionMiddleware(req, res, next) {
                             });
                         }
                     }
+                    if ((0, environment_1.isStreamDebugEnabled)() && modifiedEvent.startsWith('data: {')) {
+                        try {
+                            const debugJson = JSON.parse(modifiedEvent.substring(6));
+                            const delta = debugJson.choices?.[0]?.delta || {};
+                            logger_1.Logger.info('[STREAM_DEBUG] TO_CLIENT', correlationId, {
+                                hasContent: !!delta.content,
+                                contentPreview: delta.content?.substring(0, 100),
+                                hasThinking: !!delta.thinking,
+                                hasThinkingDelta: !!delta.thinking_delta,
+                            });
+                        }
+                        catch {
+                        }
+                    }
                     res.write(modifiedEvent + '\n\n');
-                    logger_1.Logger.info('Event relayed', correlationId);
                 }
             });
             response.data.on('end', () => {
                 logger_1.Logger.info('Stream ended', correlationId);
+                if (tracingBuffer !== null && chatRequest.model) {
+                    try {
+                        const accumulated = (0, sse_parser_1.parseAndAccumulateSSE)(tracingBuffer, correlationId);
+                        if (accumulated.usage.promptTokens) {
+                            const limits = (0, model_limits_1.getModelLimits)(chatRequest.model);
+                            const warningLevel = (0, model_limits_1.getWarningLevel)(accumulated.usage.promptTokens, limits);
+                            if (warningLevel !== 'none') {
+                                const warningText = (0, context_warning_1.generateContextWarning)(warningLevel, accumulated.usage.promptTokens, limits.maxContextTokens);
+                                if (warningText && !res.writableEnded) {
+                                    const warningChunk = (0, context_warning_1.createWarningSSEChunk)(warningText);
+                                    res.write(warningChunk);
+                                    logger_1.Logger.info('Context warning injected', correlationId, {
+                                        level: warningLevel,
+                                        promptTokens: accumulated.usage.promptTokens,
+                                        maxTokens: limits.maxContextTokens,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    catch (error) {
+                        logger_1.Logger.error('Failed to inject context warning', correlationId, {
+                            error: error instanceof Error ? error.message : String(error),
+                        });
+                    }
+                }
                 res.end();
                 if (tracingBuffer !== null && needsTracing) {
                     logger_1.Logger.info('Stream completed, starting async trace', correlationId);

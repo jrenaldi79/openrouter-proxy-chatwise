@@ -2,6 +2,7 @@ export interface EnvironmentConfig {
     PORT: number;
     NODE_ENV: string;
     OPENROUTER_BASE_URL: string;
+    OPENROUTER_API_KEY?: string;
     REQUEST_TIMEOUT_MS: number;
     RATE_LIMIT_WINDOW_MS: number;
     RATE_LIMIT_MAX_REQUESTS: number;
@@ -19,4 +20,5 @@ export interface EnvironmentConfig {
 }
 export declare function loadEnvironmentConfig(): EnvironmentConfig;
 export declare const envConfig: EnvironmentConfig;
+export declare function isStreamDebugEnabled(): boolean;
 //# sourceMappingURL=environment.d.ts.map

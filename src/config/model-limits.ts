@@ -92,15 +92,24 @@ export function getModelLimits(model: string): ModelLimits {
  */
 function getStaticModelLimits(model: string): ModelLimits {
   // Normalize model name for pattern matching (remove provider prefix)
-  const normalizedModel = model.toLowerCase().replace(/^(openai\/|anthropic\/|google\/|x-ai\/)/, '');
+  const normalizedModel = model
+    .toLowerCase()
+    .replace(/^(openai\/|anthropic\/|google\/|x-ai\/)/, '');
 
   // Check for model-specific overrides first
   // Use startsWith for exact model family matching (avoids gpt-4 matching gpt-4o)
   for (const [modelPrefix, limit] of Object.entries(MODEL_SPECIFIC_LIMITS)) {
     // Exact match: gpt-4 should only match "gpt-4" and "gpt-4-<date>", not "gpt-4o" or "gpt-4-turbo"
-    if (normalizedModel === modelPrefix || normalizedModel.startsWith(modelPrefix + '-')) {
+    if (
+      normalizedModel === modelPrefix ||
+      normalizedModel.startsWith(modelPrefix + '-')
+    ) {
       // Exclude newer variants
-      if (modelPrefix === 'gpt-4' && (normalizedModel.includes('turbo') || normalizedModel.includes('gpt-4o'))) {
+      if (
+        modelPrefix === 'gpt-4' &&
+        (normalizedModel.includes('turbo') ||
+          normalizedModel.includes('gpt-4o'))
+      ) {
         continue; // Skip this rule, use provider default
       }
 

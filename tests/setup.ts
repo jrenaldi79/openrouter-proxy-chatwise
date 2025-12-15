@@ -14,8 +14,16 @@ jest.setTimeout(10000);
 const MOCK_MODELS_DATA = {
   data: [
     { id: 'openai/gpt-4', name: 'GPT-4', context_length: 8192 },
-    { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo', context_length: 16384 },
-    { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', context_length: 200000 },
+    {
+      id: 'openai/gpt-3.5-turbo',
+      name: 'GPT-3.5 Turbo',
+      context_length: 16384,
+    },
+    {
+      id: 'anthropic/claude-3-opus',
+      name: 'Claude 3 Opus',
+      context_length: 200000,
+    },
   ],
 };
 
@@ -25,7 +33,9 @@ const MOCK_MODELS_DATA = {
  */
 export function ensureModelsMock(): void {
   const pendingMocks = nock.pendingMocks();
-  const hasModelsMock = pendingMocks.some(mock => mock.includes('/api/v1/models'));
+  const hasModelsMock = pendingMocks.some(mock =>
+    mock.includes('/api/v1/models')
+  );
   if (!hasModelsMock) {
     nock('https://openrouter.ai')
       .persist()

@@ -116,26 +116,38 @@ describe('Model Limits', () => {
 
   describe('getWarningPercentage', () => {
     it('should calculate correct percentage for anthropic model', () => {
-      const limits: ModelLimits = { provider: 'anthropic', maxContextTokens: 400000 };
+      const limits: ModelLimits = {
+        provider: 'anthropic',
+        maxContextTokens: 400000,
+      };
       expect(getWarningPercentage(100000, limits)).toBe(25);
       expect(getWarningPercentage(160000, limits)).toBe(40);
       expect(getWarningPercentage(200000, limits)).toBe(50);
     });
 
     it('should calculate correct percentage for openai model', () => {
-      const limits: ModelLimits = { provider: 'openai', maxContextTokens: 128000 };
+      const limits: ModelLimits = {
+        provider: 'openai',
+        maxContextTokens: 128000,
+      };
       expect(getWarningPercentage(32000, limits)).toBe(25);
       expect(getWarningPercentage(64000, limits)).toBe(50);
     });
 
     it('should handle edge cases', () => {
-      const limits: ModelLimits = { provider: 'anthropic', maxContextTokens: 400000 };
+      const limits: ModelLimits = {
+        provider: 'anthropic',
+        maxContextTokens: 400000,
+      };
       expect(getWarningPercentage(0, limits)).toBe(0);
       expect(getWarningPercentage(400000, limits)).toBe(100);
     });
 
     it('should round to 2 decimal places', () => {
-      const limits: ModelLimits = { provider: 'anthropic', maxContextTokens: 400000 };
+      const limits: ModelLimits = {
+        provider: 'anthropic',
+        maxContextTokens: 400000,
+      };
       expect(getWarningPercentage(123456, limits)).toBe(30.86);
     });
   });

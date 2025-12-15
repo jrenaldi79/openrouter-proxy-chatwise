@@ -138,7 +138,7 @@ describe('Context Warning', () => {
     it('should handle all warning levels', () => {
       const levels: WarningLevel[] = ['info', 'warning', 'critical'];
 
-      levels.forEach((level) => {
+      levels.forEach(level => {
         const warning = generateContextWarning(level, 100000, 200000);
         expect(warning).not.toBeNull();
 

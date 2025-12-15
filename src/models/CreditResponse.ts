@@ -123,7 +123,8 @@ export class CreditResponse {
     // Otherwise: use regular usage
     const byokUsage = keyResponse.byok_usage ?? 0;
     const isByokAccount =
-      byokUsage > 0 && (keyResponse.usage < 0.01 || byokUsage > keyResponse.usage);
+      byokUsage > 0 &&
+      (keyResponse.usage < 0.01 || byokUsage > keyResponse.usage);
     const total_usage = isByokAccount ? byokUsage : keyResponse.usage;
 
     const headers: Record<string, string> = {

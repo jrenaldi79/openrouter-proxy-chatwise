@@ -268,7 +268,10 @@ async function handleStreamingRequest(
       if (streamBuffer && req.body?.model) {
         try {
           const { parseAndAccumulateSSE } = await import('../utils/sse-parser');
-          const accumulated = parseAndAccumulateSSE(streamBuffer, correlationId);
+          const accumulated = parseAndAccumulateSSE(
+            streamBuffer,
+            correlationId
+          );
 
           if (accumulated.usage.promptTokens) {
             const limits = getModelLimits(req.body.model);
@@ -283,7 +286,9 @@ async function handleStreamingRequest(
               promptTokens: accumulated.usage.promptTokens,
               maxTokens: limits.maxContextTokens,
               warningLevel,
-              percentage: Math.round((accumulated.usage.promptTokens / limits.maxContextTokens) * 100),
+              percentage: Math.round(
+                (accumulated.usage.promptTokens / limits.maxContextTokens) * 100
+              ),
             });
 
             if (warningLevel !== 'none') {
@@ -294,11 +299,15 @@ async function handleStreamingRequest(
               );
 
               // DEBUG: Log injection attempt
-              Logger.info('Attempting context warning injection', correlationId, {
-                hasWarningText: !!warningText,
-                resWritableEnded: res.writableEnded,
-                warningLevel,
-              });
+              Logger.info(
+                'Attempting context warning injection',
+                correlationId,
+                {
+                  hasWarningText: !!warningText,
+                  resWritableEnded: res.writableEnded,
+                  warningLevel,
+                }
+              );
 
               if (warningText && !res.writableEnded) {
                 const warningChunk = createWarningSSEChunk(warningText);

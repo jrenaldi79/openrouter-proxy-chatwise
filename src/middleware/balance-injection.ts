@@ -130,7 +130,9 @@ export async function balanceInjectionMiddleware(
     const usedDollars = balance.usedCredits.toFixed(2);
     const remainingDollars = balance.totalCredits.toFixed(2);
     // Calculate limit from remaining + used
-    const limitDollars = (balance.totalCredits + balance.usedCredits).toFixed(2);
+    const limitDollars = (balance.totalCredits + balance.usedCredits).toFixed(
+      2
+    );
     const balanceText =
       balance.totalCredits === -1
         ? `💰 Account: Unlimited credits ($${usedDollars} used)\n\n`

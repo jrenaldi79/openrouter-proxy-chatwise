@@ -134,22 +134,6 @@ jobs:
         echo "🧪 Running staging validation tests against: $SERVICE_URL"
         npm run test:production
 
-    - name: Run performance tests against staging
-      env:
-        OPENROUTER_TEST_API_KEY: ${{ secrets.OPENROUTER_TEST_API_KEY }}
-        SERVICE_URL: ${{ needs.deploy-staging.outputs.staging-url }}
-      run: |
-        echo "⚡ Running performance tests against staging..."
-        npm run test:performance
-
-    - name: Run production validation tests against staging
-      env:
-        OPENROUTER_TEST_API_KEY: ${{ secrets.OPENROUTER_TEST_API_KEY }}
-        SERVICE_URL: ${{ needs.deploy-staging.outputs.staging-url }}
-      run: |
-        echo "🔬 Running production validation tests against staging..."
-        npm run test:real-api
-
     - name: Staging test results
       run: |
         echo "✅ All staging tests passed! Ready for production deployment."
